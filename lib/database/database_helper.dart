@@ -19,7 +19,12 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     String path = join(await getDatabasesPath(), 'morpheus.db');
-    return await openDatabase(path, version: 1, onCreate: _createTables);
+    return await openDatabase(
+      path,
+      version: 3,
+      onCreate: _createTables,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future<void> _createTables(Database db, int version) async {
@@ -32,9 +37,15 @@ class DatabaseHelper {
         expiry_date TEXT NOT NULL,
         cvv TEXT NOT NULL,
         bank_name TEXT NOT NULL,
+        card_network TEXT,
         card_type TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
+        billing_day INTEGER DEFAULT 1,
+        grace_days INTEGER DEFAULT 15,
+        usage_limit REAL,
+        reminder_enabled INTEGER DEFAULT 0,
+        reminder_offsets TEXT,
         is_synced INTEGER DEFAULT 0,
         is_deleted INTEGER DEFAULT 0
       )
@@ -83,6 +94,31 @@ class DatabaseHelper {
         created_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN billing_day INTEGER DEFAULT 1',
+      );
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN grace_days INTEGER DEFAULT 15',
+      );
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN usage_limit REAL',
+      );
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN reminder_enabled INTEGER DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN reminder_offsets TEXT',
+      );
+    }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN card_network TEXT',
+      );
+    }
   }
 }
 

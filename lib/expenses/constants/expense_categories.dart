@@ -15,4 +15,5 @@ const expenseCategories = <String>[
   'Gadgets',
   'Subscriptions',
   'Savings',
+  'Card Payment',
 ];

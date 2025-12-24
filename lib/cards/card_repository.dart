@@ -90,18 +90,33 @@ class CardRepository {
       'expiry_date': card.expiryDate,
       'cvv': card.cvv,
       'bank_name': card.bankName,
+      'card_network': card.cardNetwork,
       'card_type': 'credit',
       'created_at': (card.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
       'updated_at': (card.updatedAt ?? DateTime.now()).millisecondsSinceEpoch,
+      'billing_day': card.billingDay,
+      'grace_days': card.graceDays,
+      'usage_limit': card.usageLimit,
+      'reminder_enabled': card.reminderEnabled ? 1 : 0,
+      'reminder_offsets': card.reminderOffsets.join(','),
       'is_synced': 1,
       'is_deleted': 0,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   CreditCard _fromDbRow(Map<String, Object?> row) {
+    final offsetsRaw = row['reminder_offsets'] as String?;
+    final offsets = offsetsRaw == null || offsetsRaw.isEmpty
+        ? <int>[]
+        : offsetsRaw
+            .split(',')
+            .map((v) => int.tryParse(v) ?? 0)
+            .where((v) => v > 0)
+            .toList();
     return CreditCard(
       id: row['id'] as String,
       bankName: row['bank_name'] as String,
+      cardNetwork: row['card_network'] as String?,
       cardNumber: row['card_number'] as String,
       holderName: row['card_holder_name'] as String,
       expiryDate: row['expiry_date'] as String,
@@ -110,6 +125,11 @@ class CardRepository {
       textColor: Colors.white,
       createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
+      billingDay: (row['billing_day'] as int?) ?? 1,
+      graceDays: (row['grace_days'] as int?) ?? 15,
+      usageLimit: (row['usage_limit'] as num?)?.toDouble(),
+      reminderEnabled: (row['reminder_enabled'] as int?) == 1,
+      reminderOffsets: offsets,
     );
   }
 
@@ -118,6 +138,7 @@ class CardRepository {
       'id': card.id,
       'bankName': EncryptionService.encryptData(card.bankName),
       'bankIconUrl': card.bankIconUrl,
+      'cardNetwork': card.cardNetwork,
       'cardNumber': EncryptionService.encryptData(card.cardNumber),
       'holderName': EncryptionService.encryptData(card.holderName),
       'expiryDate': EncryptionService.encryptData(card.expiryDate),
@@ -126,6 +147,11 @@ class CardRepository {
       'textColor': card.textColor.value,
       'createdAt': (card.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
       'updatedAt': (card.updatedAt ?? DateTime.now()).millisecondsSinceEpoch,
+      'billingDay': card.billingDay,
+      'graceDays': card.graceDays,
+      'usageLimit': card.usageLimit,
+      'reminderEnabled': card.reminderEnabled,
+      'reminderOffsets': card.reminderOffsets,
     };
   }
 
@@ -147,10 +173,28 @@ class CardRepository {
       }
     }
 
+    List<int> offsetsFrom(dynamic raw) {
+      if (raw is List) {
+        return raw
+            .map((e) => (e as num?)?.toInt() ?? 0)
+            .where((v) => v > 0)
+            .toList();
+      }
+      if (raw is String) {
+        return raw
+            .split(',')
+            .map((e) => int.tryParse(e) ?? 0)
+            .where((v) => v > 0)
+            .toList();
+      }
+      return const [];
+    }
+
     return CreditCard(
       id: (data['id'] ?? '').toString(),
       bankName: decrypt('bankName', 'Unknown'),
       bankIconUrl: data['bankIconUrl'] as String?,
+      cardNetwork: data['cardNetwork'] as String? ?? data['card_network'] as String?,
       cardNumber: decrypt('cardNumber', '**** **** **** 0000'),
       holderName: decrypt('holderName', ''),
       expiryDate: decrypt('expiryDate', ''),
@@ -159,6 +203,15 @@ class CardRepository {
       textColor: Color((data['textColor'] ?? 0xFFFFFFFF) as int),
       createdAt: toDate(data['createdAt']),
       updatedAt: toDate(data['updatedAt']),
+      billingDay: (data['billingDay'] ?? data['billing_day'] ?? 1) as int,
+      graceDays: (data['graceDays'] ?? data['grace_days'] ?? 15) as int,
+      usageLimit: (data['usageLimit'] as num?)?.toDouble(),
+      reminderEnabled: (data['reminderEnabled'] ??
+              data['reminder_enabled'] ??
+              false) as bool,
+      reminderOffsets: offsetsFrom(
+        data['reminderOffsets'] ?? data['reminder_offsets'],
+      ),
     );
   }
 }

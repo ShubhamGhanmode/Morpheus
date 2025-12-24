@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/cards/card_repository.dart';
 import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/services/notification_service.dart';
 
 class CardState extends Equatable {
   final List<CreditCard> cards;
@@ -23,15 +24,19 @@ class CardState extends Equatable {
 }
 
 class CardCubit extends Cubit<CardState> {
-  CardCubit(this._repository) : super(const CardState());
+  CardCubit(this._repository, {NotificationService? notificationService})
+    : _notifications = notificationService ?? NotificationService.instance,
+      super(const CardState());
 
   final CardRepository _repository;
+  final NotificationService _notifications;
 
   Future<void> loadCards() async {
     emit(state.copyWith(loading: true, error: null));
     try {
       final cards = await _repository.fetchCards();
       emit(state.copyWith(cards: cards, loading: false));
+      await _notifications.scheduleCardReminders(cards);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -43,6 +48,7 @@ class CardCubit extends Cubit<CardState> {
       await _repository.saveCard(card);
       final updated = [card, ...state.cards.where((c) => c.id != card.id)];
       emit(state.copyWith(cards: updated, loading: false));
+      await _notifications.scheduleCardReminders(updated);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -52,12 +58,9 @@ class CardCubit extends Cubit<CardState> {
     emit(state.copyWith(loading: true, error: null));
     try {
       await _repository.deleteCard(id);
-      emit(
-        state.copyWith(
-          cards: state.cards.where((c) => c.id != id).toList(),
-          loading: false,
-        ),
-      );
+      final updated = state.cards.where((c) => c.id != id).toList();
+      emit(state.copyWith(cards: updated, loading: false));
+      await _notifications.scheduleCardReminders(updated);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }

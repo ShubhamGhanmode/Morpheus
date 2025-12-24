@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:morpheus/banks/bank_repository.dart';
 import 'package:morpheus/banks/bank_search_cubit.dart';
 import 'package:morpheus/creditcard_management_page.dart';
@@ -25,9 +26,13 @@ class _AddCardDialogState extends State<AddCardDialog> {
   final _numCtrl = TextEditingController();
   final _expCtrl = TextEditingController();
   final _cvvCtrl = TextEditingController();
+  final _billingDayCtrl = TextEditingController();
+  final _graceDaysCtrl = TextEditingController();
+  final _usageLimitCtrl = TextEditingController();
 
   late final BankSearchCubit _bankSearchCubit;
   String? _bankIconUrl;
+  String? _cardNetwork;
 
   Color _cardColor = const Color(0xFF1E3A8A);
   Color? _explicitTextColor;
@@ -36,11 +41,27 @@ class _AddCardDialogState extends State<AddCardDialog> {
       (ThemeData.estimateBrightnessForColor(_cardColor) == Brightness.dark
           ? Colors.white
           : const Color(0xFF1F2937));
+  int _billingDay = 1;
+  int _graceDays = 15;
+  double? _usageLimit;
+  bool _reminderEnabled = false;
+  final Set<int> _reminderOffsets = {7, 2};
 
   @override
   void initState() {
     super.initState();
     _bankSearchCubit = BankSearchCubit(BankRepository())..preload();
+    _billingDay = (widget.existing?.billingDay ?? 1).clamp(1, 28);
+    _graceDays = (widget.existing?.graceDays ?? 15).clamp(0, 90);
+    _usageLimit = widget.existing?.usageLimit;
+    _reminderEnabled = widget.existing?.reminderEnabled ?? false;
+    _reminderOffsets
+      ..clear()
+      ..addAll(widget.existing?.reminderOffsets ?? const [7, 2]);
+    _billingDayCtrl.text = _billingDay.toString();
+    _graceDaysCtrl.text = _graceDays.toString();
+    _usageLimitCtrl.text =
+        _usageLimit != null ? _usageLimit!.toStringAsFixed(0) : '';
     if (widget.existing != null) {
       _bankCtrl.text = widget.existing!.bankName;
       _holderCtrl.text = widget.existing!.holderName;
@@ -52,6 +73,7 @@ class _AddCardDialogState extends State<AddCardDialog> {
       _cardColor = widget.existing!.cardColor;
       _explicitTextColor = widget.existing!.textColor;
       _bankIconUrl = widget.existing!.bankIconUrl;
+      _cardNetwork = widget.existing!.cardNetwork;
     } else {
       _prefillIcon(); // try to prefill icon if bank name matches top banks
     }
@@ -64,6 +86,9 @@ class _AddCardDialogState extends State<AddCardDialog> {
     _numCtrl.dispose();
     _expCtrl.dispose();
     _cvvCtrl.dispose();
+    _billingDayCtrl.dispose();
+    _graceDaysCtrl.dispose();
+    _usageLimitCtrl.dispose();
     _bankSearchCubit.close();
     super.dispose();
   }
@@ -110,6 +135,14 @@ class _AddCardDialogState extends State<AddCardDialog> {
     if (!_formKey.currentState!.validate()) return false;
     final rawDigits = _numCtrl.text.replaceAll(RegExp(r'\D'), '');
     final grouped = _groupCard(rawDigits);
+    final parsedBilling = int.tryParse(_billingDayCtrl.text) ?? _billingDay;
+    final parsedGrace = int.tryParse(_graceDaysCtrl.text) ?? _graceDays;
+    final parsedLimit = _usageLimitCtrl.text.trim().isEmpty
+        ? null
+        : double.tryParse(_usageLimitCtrl.text.trim());
+    _billingDay = parsedBilling.clamp(1, 28);
+    _graceDays = parsedGrace.clamp(0, 90);
+    _usageLimit = parsedLimit;
 
     final card = CreditCard(
       id:
@@ -117,6 +150,7 @@ class _AddCardDialogState extends State<AddCardDialog> {
           DateTime.now().millisecondsSinceEpoch.toString(),
       bankName: _bankCtrl.text.trim(),
       bankIconUrl: _bankIconUrl,
+      cardNetwork: _cardNetwork,
       cardNumber: grouped, // stored raw (encrypted remotely), masked in UI
       holderName: _holderCtrl.text.trim().toUpperCase(),
       expiryDate: _expCtrl.text.trim(),
@@ -125,6 +159,13 @@ class _AddCardDialogState extends State<AddCardDialog> {
       textColor: _explicitTextColor ?? _textColor,
       createdAt: widget.existing?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
+      billingDay: _billingDay,
+      graceDays: _graceDays,
+      usageLimit: _usageLimit,
+      reminderEnabled: _reminderEnabled,
+      reminderOffsets: _reminderEnabled
+          ? _reminderOffsets.where((d) => d > 0).toList()
+          : const [],
     );
 
     Navigator.of(context).pop(card);
@@ -149,6 +190,11 @@ class _AddCardDialogState extends State<AddCardDialog> {
     Color(0xFF334155),
     Color(0xFFF59E0B),
   ];
+
+  static const _networkAssets = {
+    'visa': 'assets/visa.svg',
+    'mastercard': 'assets/mastercard.svg',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -235,11 +281,16 @@ class _AddCardDialogState extends State<AddCardDialog> {
                                 children: [
                                   Expanded(child: _buildBankSearchField()),
                                   const SizedBox(width: 12),
-                                  Icon(
-                                    Icons.credit_card,
-                                    color: _textColor.withOpacity(0.85),
-                                    size: 28,
-                                  ),
+                                  _cardNetwork != null
+                                      ? _networkLogo(
+                                          _cardNetwork!,
+                                          size: 24,
+                                        )
+                                      : Icon(
+                                          Icons.credit_card,
+                                          color: _textColor.withOpacity(0.85),
+                                          size: 28,
+                                        ),
                                 ],
                               ),
                               const Spacer(),
@@ -374,6 +425,10 @@ class _AddCardDialogState extends State<AddCardDialog> {
                 ),
                 const SizedBox(height: 14),
                 _buildBankSuggestions(),
+                const SizedBox(height: 12),
+                _buildNetworkSelector(),
+                const SizedBox(height: 12),
+                _buildBillingAndLimitFields(),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Wrap(
@@ -554,6 +609,78 @@ class _AddCardDialogState extends State<AddCardDialog> {
     );
   }
 
+  Widget _buildNetworkSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.credit_card, size: 18),
+            SizedBox(width: 6),
+            Text(
+              'Card network',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('None'),
+              selected: _cardNetwork == null,
+              onSelected: (v) => setState(() {
+                _cardNetwork = null;
+              }),
+            ),
+            _networkChip('visa', 'Visa'),
+            _networkChip('mastercard', 'Mastercard'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _networkChip(String network, String label) {
+    return ChoiceChip(
+      label: Text(label),
+      avatar: _networkLogo(network, size: 18),
+      selected: _cardNetwork == network,
+      onSelected: (v) => setState(() {
+        _cardNetwork = v ? network : null;
+      }),
+    );
+  }
+
+  Widget _networkLogo(String network, {double size = 22}) {
+    final asset = _networkAssets[network];
+    if (asset == null) {
+      return Icon(Icons.credit_card, size: size);
+    }
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: SvgPicture.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
   Future<void> _pickCustomColor() async {
     double hue = HSVColor.fromColor(_cardColor).hue;
     double saturation = HSVColor.fromColor(_cardColor).saturation;
@@ -626,5 +753,113 @@ class _AddCardDialogState extends State<AddCardDialog> {
         _explicitTextColor = null;
       });
     }
+  }
+
+  Widget _buildBillingAndLimitFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.schedule, size: 18),
+            SizedBox(width: 6),
+            Text(
+              'Billing & limits',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _billingDayCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Billing day (1-28)',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                validator: (v) {
+                  final parsed = int.tryParse(v ?? '');
+                  if (parsed == null || parsed < 1 || parsed > 28) {
+                    return '1-28';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _graceDaysCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Grace days',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(2),
+                ],
+                validator: (v) {
+                  final parsed = int.tryParse(v ?? '');
+                  if (parsed == null || parsed < 0) {
+                    return 'Enter 0+';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _usageLimitCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Usage limit (optional)',
+            helperText: 'We will warn when spend is near/over this value',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          onChanged: (v) {
+            setState(() {
+              _usageLimit =
+                  v.trim().isEmpty ? null : double.tryParse(v.trim());
+            });
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Remind before due date'),
+          subtitle: const Text('Shows reminders in dashboard for this card'),
+          value: _reminderEnabled,
+          onChanged: (v) => setState(() => _reminderEnabled = v),
+        ),
+        if (_reminderEnabled)
+          Wrap(
+            spacing: 8,
+            children: [14, 7, 3, 2, 1]
+                .map(
+                  (offset) => FilterChip(
+                    label: Text('$offset days before'),
+                    selected: _reminderOffsets.contains(offset),
+                    onSelected: (v) => setState(() {
+                      if (v) {
+                        _reminderOffsets.add(offset);
+                      } else {
+                        _reminderOffsets.remove(offset);
+                      }
+                    }),
+                  ),
+                )
+                .toList(),
+          ),
+      ],
+    );
   }
 }

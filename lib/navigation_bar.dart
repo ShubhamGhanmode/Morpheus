@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:morpheus/accounts.dart';
 import 'package:morpheus/creditcard_management_page.dart';
 import 'package:morpheus/expenses/view/expense_dashboard_page.dart';
+import 'package:morpheus/settings/settings_page.dart';
 
 /// Root shell that holds a Material 3 bottom NavigationBar and preserves
 /// each tab's state via an IndexedStack.
@@ -22,6 +23,7 @@ class _AppNavShellState extends State<AppNavShell> {
     ExpenseDashboardPage(),
     CreditCardManagementPage(),
     AccountsPage(),
+    SettingsPage(),
   ];
 
   @override
@@ -50,6 +52,11 @@ class _AppNavShellState extends State<AppNavShell> {
             icon: Icon(Icons.account_balance_outlined),
             selectedIcon: Icon(Icons.account_balance),
             label: 'Accounts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),

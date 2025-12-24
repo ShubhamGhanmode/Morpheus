@@ -1,25 +1,65 @@
 import 'package:flutter/material.dart';
 import 'color_schemes.dart';
+import 'theme_contrast.dart';
 import 'typography.dart';
 
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light() {
-    final colors = lightColorScheme;
-    final textTheme = buildTextTheme(colors);
+  static ThemeData light(
+    BuildContext context, {
+    AppContrast contrast = AppContrast.normal,
+  }) {
+    return _buildTheme(context, _schemeFor(Brightness.light, contrast));
+  }
 
-    return ThemeData(
+  static ThemeData dark(
+    BuildContext context, {
+    AppContrast contrast = AppContrast.normal,
+  }) {
+    return _buildTheme(context, _schemeFor(Brightness.dark, contrast));
+  }
+
+  static ColorScheme _schemeFor(Brightness brightness, AppContrast contrast) {
+    switch (contrast) {
+      case AppContrast.medium:
+        return brightness == Brightness.dark
+            ? darkMediumContrastColorScheme
+            : lightMediumContrastColorScheme;
+      case AppContrast.high:
+        return brightness == Brightness.dark
+            ? darkHighContrastColorScheme
+            : lightHighContrastColorScheme;
+      case AppContrast.normal:
+      default:
+        return brightness == Brightness.dark
+            ? darkColorScheme
+            : lightColorScheme;
+    }
+  }
+
+  static ThemeData _buildTheme(BuildContext context, ColorScheme colors) {
+    final textTheme = createTextTheme(context, "Manrope", "Manrope");
+    final baseTheme = ThemeData(
       useMaterial3: true,
+      brightness: colors.brightness,
       colorScheme: colors,
-      textTheme: textTheme,
-      scaffoldBackgroundColor: colors.surface,
+      textTheme: textTheme.apply(
+        bodyColor: colors.onSurface,
+        displayColor: colors.onSurface,
+      ),
+      scaffoldBackgroundColor: colors.background,
+      canvasColor: colors.surface,
+    );
+    final themedText = baseTheme.textTheme;
+
+    return baseTheme.copyWith(
       appBarTheme: AppBarTheme(
         backgroundColor: colors.surface,
         surfaceTintColor: colors.surfaceTint,
         foregroundColor: colors.onSurface,
         elevation: 0,
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: themedText.titleLarge,
       ),
       cardTheme: CardThemeData(
         color: colors.surfaceContainerHighest,
@@ -31,7 +71,7 @@ class AppTheme {
         backgroundColor: colors.surface,
         indicatorColor: colors.primaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith(
-          (states) => textTheme.labelMedium?.copyWith(
+          (states) => themedText.labelMedium?.copyWith(
             color: states.contains(WidgetState.selected)
                 ? colors.onPrimaryContainer
                 : colors.onSurfaceVariant,

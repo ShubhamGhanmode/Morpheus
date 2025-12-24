@@ -1,21 +1,35 @@
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/auth/auth_bloc.dart';
 import 'package:morpheus/auth/auth_repository.dart';
 import 'package:morpheus/navigation_bar.dart';
 import 'package:morpheus/services/auth_service.dart';
+import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/splash_page.dart';
+import 'package:morpheus/lock/app_lock_gate.dart';
+import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/settings/settings_repository.dart';
+import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/app_theme.dart';
 
 import 'firebase_options.dart'; // created by flutterfire configure
 import 'signup_page.dart';
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.handleRemoteMessage(message);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await AuthService.initializeGoogle(
     serverClientId:
         "842775331840-gsso7qkcb8mmi0sj97b63upejevbku48.apps.googleusercontent.com",
@@ -24,25 +38,65 @@ Future<void> main() async {
         : null,
   );
 
+  await NotificationService.instance.initialize();
+
   final authRepository = AuthRepository();
-  runApp(MorpheusApp(authRepository: authRepository));
+  final settingsRepository = SettingsRepository();
+  final initialSettings = await settingsRepository.load();
+  runApp(
+    MorpheusApp(
+      authRepository: authRepository,
+      settingsRepository: settingsRepository,
+      initialSettings: initialSettings,
+    ),
+  );
 }
 
 class MorpheusApp extends StatelessWidget {
-  const MorpheusApp({super.key, required this.authRepository});
+  const MorpheusApp({
+    super.key,
+    required this.authRepository,
+    required this.settingsRepository,
+    required this.initialSettings,
+  });
 
   final AuthRepository authRepository;
+  final SettingsRepository settingsRepository;
+  final SettingsState initialSettings;
 
   @override
   Widget build(BuildContext context) {
     return RepositoryProvider.value(
       value: authRepository,
-      child: BlocProvider(
-        create: (_) => AuthBloc(authRepository)..add(const AppStarted()),
-        child: MaterialApp(
-          title: 'Morpheus',
-          theme: AppTheme.light(),
-          home: const AuthGate(),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => AuthBloc(authRepository)..add(const AppStarted())),
+          BlocProvider(
+            create: (_) => SettingsCubit(
+              repository: settingsRepository,
+              initialState: initialSettings,
+            ),
+          ),
+        ],
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, settings) {
+            return MaterialApp(
+              title: 'Morpheus',
+              theme: AppTheme.light(
+                context,
+                contrast: settings.contrast,
+              ),
+              darkTheme: AppTheme.dark(
+                context,
+                contrast: settings.contrast,
+              ),
+              themeMode: settings.themeMode,
+              home: AppLockGate(
+                enabled: settings.appLockEnabled,
+                child: const AuthGate(),
+              ),
+            );
+          },
         ),
       ),
     );

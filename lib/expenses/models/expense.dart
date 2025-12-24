@@ -14,6 +14,8 @@ class Expense extends Equatable {
     this.budgetCurrency,
     this.budgetRate,
     this.amountInBudgetCurrency,
+    this.paymentSourceType = 'cash',
+    this.paymentSourceId,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -27,6 +29,8 @@ class Expense extends Equatable {
   final String? budgetCurrency;
   final double? budgetRate;
   final double? amountInBudgetCurrency;
+  final String paymentSourceType;
+  final String? paymentSourceId;
 
   Expense copyWith({
     String? id,
@@ -40,6 +44,8 @@ class Expense extends Equatable {
     String? budgetCurrency,
     double? budgetRate,
     double? amountInBudgetCurrency,
+    String? paymentSourceType,
+    String? paymentSourceId,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -54,6 +60,8 @@ class Expense extends Equatable {
       budgetRate: budgetRate ?? this.budgetRate,
       amountInBudgetCurrency:
           amountInBudgetCurrency ?? this.amountInBudgetCurrency,
+      paymentSourceType: paymentSourceType ?? this.paymentSourceType,
+      paymentSourceId: paymentSourceId ?? this.paymentSourceId,
     );
   }
 
@@ -69,6 +77,8 @@ class Expense extends Equatable {
     'budgetCurrency': budgetCurrency,
     'budgetRate': budgetRate,
     'amountInBudgetCurrency': amountInBudgetCurrency,
+    'paymentSourceType': paymentSourceType,
+    'paymentSourceId': paymentSourceId,
   };
 
   factory Expense.fromMap(Map<String, dynamic> map) {
@@ -85,6 +95,9 @@ class Expense extends Equatable {
       budgetRate: (map['budgetRate'] as num?)?.toDouble(),
       amountInBudgetCurrency: (map['amountInBudgetCurrency'] as num?)
           ?.toDouble(),
+      paymentSourceType:
+          (map['paymentSourceType'] as String?)?.toLowerCase() ?? 'cash',
+      paymentSourceId: map['paymentSourceId'] as String?,
     );
   }
 
@@ -111,5 +124,7 @@ class Expense extends Equatable {
     budgetCurrency,
     budgetRate,
     amountInBudgetCurrency,
+    paymentSourceType,
+    paymentSourceId,
   ];
 }
