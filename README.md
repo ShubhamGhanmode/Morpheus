@@ -47,6 +47,13 @@ This repo intentionally does NOT include:
 
 Follow these steps to bootstrap your own Firebase project.
 
+### 0) Quick checklist for using your own Firebase project
+- Replace `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist` with your own.
+- Update `.firebaserc` or run `firebase use --add` to point to your project.
+- Run `flutterfire configure` to regenerate `firebase.json` and `lib/firebase_options.dart`.
+- Update `functions/.env.<projectId>` with your secrets.
+- If you change regions, update `REGION` in `functions/index.js` and the callable region in `lib/services/notification_service.dart`.
+
 ### 1) Create a Firebase project
 1. Go to the Firebase Console and create a new project.
 2. Enable Google Analytics only if you want it.
@@ -67,6 +74,12 @@ In Firebase Console:
 - **Authentication**: enable Google Sign-In
 - **Firestore**: create a database (production or test mode)
 - **Cloud Messaging**: keep defaults (used by FCM)
+
+### 3b) Deploy security rules
+This repo includes `firestore.rules` and `storage.rules`:
+```bash
+firebase deploy --only firestore,storage
+```
 
 ### 4) Configure Google Sign-In (Android)
 Add SHA-1 and SHA-256 to your Android app in Firebase Console:
@@ -110,6 +123,8 @@ This deploys:
 - reminder scheduler and task handler (Cloud Tasks)
 - test push function
 - monthly snapshot job
+
+Note: Firebase Functions require the Blaze (pay-as-you-go) plan. For personal use and low traffic, the cost is typically negligible, but billing must be enabled to deploy functions.
 
 ### 9) Run the app
 ```bash
@@ -199,5 +214,5 @@ This app uses a Cloud Tasks pipeline to send timezone-aware card reminder push n
 - Run app: `flutter run`
 
 ## License
-MIT (see project license if present).
+MIT license.
 
