@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:uuid/uuid.dart';
 
 class Expense extends Equatable {
@@ -11,11 +12,15 @@ class Expense extends Equatable {
     required this.date,
     this.note,
     this.amountEur,
+    this.baseCurrency,
+    this.baseRate,
+    this.amountInBaseCurrency,
     this.budgetCurrency,
     this.budgetRate,
     this.amountInBudgetCurrency,
     this.paymentSourceType = 'cash',
     this.paymentSourceId,
+    this.transactionType = 'spend',
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -26,11 +31,15 @@ class Expense extends Equatable {
   final DateTime date;
   final String? note;
   final double? amountEur;
+  final String? baseCurrency;
+  final double? baseRate;
+  final double? amountInBaseCurrency;
   final String? budgetCurrency;
   final double? budgetRate;
   final double? amountInBudgetCurrency;
   final String paymentSourceType;
   final String? paymentSourceId;
+  final String transactionType;
 
   Expense copyWith({
     String? id,
@@ -41,11 +50,15 @@ class Expense extends Equatable {
     DateTime? date,
     String? note,
     double? amountEur,
+    String? baseCurrency,
+    double? baseRate,
+    double? amountInBaseCurrency,
     String? budgetCurrency,
     double? budgetRate,
     double? amountInBudgetCurrency,
     String? paymentSourceType,
     String? paymentSourceId,
+    String? transactionType,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -56,12 +69,16 @@ class Expense extends Equatable {
       date: date ?? this.date,
       note: note ?? this.note,
       amountEur: amountEur ?? this.amountEur,
+      baseCurrency: baseCurrency ?? this.baseCurrency,
+      baseRate: baseRate ?? this.baseRate,
+      amountInBaseCurrency: amountInBaseCurrency ?? this.amountInBaseCurrency,
       budgetCurrency: budgetCurrency ?? this.budgetCurrency,
       budgetRate: budgetRate ?? this.budgetRate,
       amountInBudgetCurrency:
           amountInBudgetCurrency ?? this.amountInBudgetCurrency,
       paymentSourceType: paymentSourceType ?? this.paymentSourceType,
       paymentSourceId: paymentSourceId ?? this.paymentSourceId,
+      transactionType: transactionType ?? this.transactionType,
     );
   }
 
@@ -74,11 +91,15 @@ class Expense extends Equatable {
     'date': date.millisecondsSinceEpoch,
     'note': note,
     'amountEur': amountEur,
+    'baseCurrency': baseCurrency,
+    'baseRate': baseRate,
+    'amountInBaseCurrency': amountInBaseCurrency,
     'budgetCurrency': budgetCurrency,
     'budgetRate': budgetRate,
     'amountInBudgetCurrency': amountInBudgetCurrency,
     'paymentSourceType': paymentSourceType,
     'paymentSourceId': paymentSourceId,
+    'transactionType': transactionType,
   };
 
   factory Expense.fromMap(Map<String, dynamic> map) {
@@ -91,6 +112,10 @@ class Expense extends Equatable {
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
       note: map['note'] as String?,
       amountEur: (map['amountEur'] as num?)?.toDouble(),
+      baseCurrency: map['baseCurrency'] as String?,
+      baseRate: (map['baseRate'] as num?)?.toDouble(),
+      amountInBaseCurrency: (map['amountInBaseCurrency'] as num?)
+          ?.toDouble(),
       budgetCurrency: map['budgetCurrency'] as String?,
       budgetRate: (map['budgetRate'] as num?)?.toDouble(),
       amountInBudgetCurrency: (map['amountInBudgetCurrency'] as num?)
@@ -98,15 +123,28 @@ class Expense extends Equatable {
       paymentSourceType:
           (map['paymentSourceType'] as String?)?.toLowerCase() ?? 'cash',
       paymentSourceId: map['paymentSourceId'] as String?,
+      transactionType: (map['transactionType'] as String?) ?? 'spend',
     );
   }
 
   double amountForCurrency(String targetCurrency) {
     if (targetCurrency == currency) return amount;
-    if (targetCurrency == 'EUR' && amountEur != null) return amountEur!;
+    if (baseCurrency != null &&
+        targetCurrency == baseCurrency &&
+        amountInBaseCurrency != null) {
+      return amountInBaseCurrency!;
+    }
+    if (targetCurrency == AppConfig.baseCurrency && amountEur != null) {
+      return amountEur!;
+    }
     if (budgetCurrency != null && budgetCurrency == targetCurrency) {
       if (amountInBudgetCurrency != null) return amountInBudgetCurrency!;
       if (budgetRate != null) return amount * budgetRate!;
+    }
+    if (baseCurrency != null &&
+        targetCurrency == baseCurrency &&
+        baseRate != null) {
+      return amount * baseRate!;
     }
     return amount;
   }
@@ -121,10 +159,14 @@ class Expense extends Equatable {
     date,
     note,
     amountEur,
+    baseCurrency,
+    baseRate,
+    amountInBaseCurrency,
     budgetCurrency,
     budgetRate,
     amountInBudgetCurrency,
     paymentSourceType,
     paymentSourceId,
+    transactionType,
   ];
 }

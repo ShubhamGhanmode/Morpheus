@@ -2,10 +2,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/auth/auth_bloc.dart';
+import 'package:morpheus/categories/category_cubit.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/theme_contrast.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -17,6 +20,7 @@ class SettingsPage extends StatelessWidget {
     return BlocBuilder<SettingsCubit, SettingsState>(
       builder: (context, state) {
         final colorScheme = Theme.of(context).colorScheme;
+        final categoriesState = context.watch<CategoryCubit>().state;
         return Scaffold(
           appBar: AppBar(title: const Text('Settings')),
           body: ListView(
@@ -99,29 +103,71 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ],
               ),
+              // _SettingsSection(
+              //   title: 'Currency',
+              //   children: [
+              //     _SegmentedSetting(
+              //       title: 'Base currency',
+              //       subtitle: 'Used for dashboards and totals',
+              //       child: SegmentedButton<String>(
+              //         segments: AppConfig.supportedCurrencies
+              //             .map(
+              //               (c) => ButtonSegment(
+              //                 value: c,
+              //                 label: Text(c, style: const TextStyle(fontSize: 12)),
+              //               ),
+              //             )
+              //             .toList(),
+              //         selected: {state.baseCurrency},
+              //         onSelectionChanged: AppConfig.supportedCurrencies.length == 1
+              //             ? null
+              //             : (selection) {
+              //               context.read<SettingsCubit>().setBaseCurrency(selection.first);
+              //             },
+              //       ),
+              //     ),
+              //   ],
+              // ),
+              _SettingsSection(
+                title: 'Categories',
+                children: [
+                  if (categoriesState.items.isEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.playlist_add_outlined),
+                      title: const Text('Add default categories'),
+                      subtitle: const Text('Populate common categories for expenses'),
+                      trailing: categoriesState.loading
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : null,
+                      onTap: categoriesState.loading ? null : () => context.read<CategoryCubit>().addDefaultCategories(),
+                    )
+                  else
+                    ListTile(
+                      leading: const Icon(Icons.add_circle_outline),
+                      title: const Text('Add a custom category'),
+                      subtitle: const Text('Add a new label with an optional emoji'),
+                      trailing: categoriesState.loading
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : null,
+                      onTap: categoriesState.loading ? null : () => _promptAddCategory(context),
+                    ),
+                ],
+              ),
               _SettingsSection(
                 title: 'Security',
                 children: [
                   SwitchListTile(
                     value: state.appLockEnabled,
                     onChanged: (value) async {
-                      final ok = await context
-                          .read<SettingsCubit>()
-                          .setAppLockEnabled(value);
+                      final ok = await context.read<SettingsCubit>().setAppLockEnabled(value);
                       if (!ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Device authentication unavailable or cancelled.',
-                            ),
-                          ),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(const SnackBar(content: Text('Device authentication unavailable or cancelled.')));
                       }
                     },
                     title: const Text('App lock'),
-                    subtitle: const Text(
-                      'Require device authentication on open and resume',
-                    ),
+                    subtitle: const Text('Require device authentication on open and resume'),
                     secondary: const Icon(Icons.lock_outline_rounded),
                   ),
                 ],
@@ -149,13 +195,9 @@ class SettingsPage extends StatelessWidget {
                 children: [
                   SwitchListTile(
                     value: state.testModeEnabled,
-                    onChanged: (value) => context
-                        .read<SettingsCubit>()
-                        .setTestModeEnabled(value),
+                    onChanged: (value) => context.read<SettingsCubit>().setTestModeEnabled(value),
                     title: const Text('Test mode'),
-                    subtitle: const Text(
-                      'Show developer tools like test notifications',
-                    ),
+                    subtitle: const Text('Show developer tools like test notifications'),
                     secondary: const Icon(Icons.science_outlined),
                   ),
                 ],
@@ -166,11 +208,73 @@ class SettingsPage extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.info_outline),
                     title: const Text('About Morpheus'),
-                    onTap: () => showAboutDialog(
-                      context: context,
-                      applicationName: 'Morpheus',
-                      applicationLegalese: 'Smart finance companion',
-                    ),
+                    onTap: () {
+                      final theme = Theme.of(context);
+                      final repoUrl = Uri.parse('https://github.com/ShubhamGhanmode/Morpheus');
+                      showAboutDialog(
+                        context: context,
+                        applicationName: 'Morpheus',
+                        applicationVersion: '1.0.0',
+                        children: [
+                          const SizedBox(height: 8),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _openRepo(context, repoUrl),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.balance, color: colorScheme.tertiary),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          "MIT License",
+                                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.code, color: colorScheme.tertiary),
+                                        SizedBox(width: 8),
+                                        Text("Repo: ", style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+                                      ],
+                                    ),
+
+                                    Row(
+                                      children: [
+                                        SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'github.com/ShubhamGhanmode/Morpheus',
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              color: theme.colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Icon(Icons.open_in_new, size: 18, color: theme.colorScheme.primary),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Made by Shubham Ghanmode',
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -206,6 +310,71 @@ class SettingsPage extends StatelessWidget {
 
     if (confirm && context.mounted) {
       context.read<AuthBloc>().add(const SignOutRequested());
+    }
+  }
+
+  Future<void> _promptAddCategory(BuildContext context) async {
+    final nameCtrl = TextEditingController();
+    final emojiCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final shouldSave =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Add category'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Category name'),
+                    textCapitalization: TextCapitalization.words,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: emojiCtrl,
+                    decoration: const InputDecoration(labelText: 'Emoji (optional)', hintText: 'e.g. 🍔'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.of(ctx).pop(true);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (shouldSave && context.mounted) {
+      final name = nameCtrl.text.trim();
+      final emoji = emojiCtrl.text.trim();
+      await context.read<CategoryCubit>().addCategory(name: name, emoji: emoji.isEmpty ? '' : emoji);
+    }
+
+    nameCtrl.dispose();
+    emojiCtrl.dispose();
+  }
+
+  Future<void> _openRepo(BuildContext context, Uri url) async {
+    try {
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
     }
   }
 }

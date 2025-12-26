@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/theme_contrast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ class SettingsRepository {
   static const _cardRemindersKey = 'settings.cardRemindersEnabled';
   static const _appLockKey = 'settings.appLockEnabled';
   static const _testModeKey = 'settings.testModeEnabled';
+  static const _baseCurrencyKey = 'settings.baseCurrency';
 
   Future<SettingsState> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -17,6 +19,7 @@ class SettingsRepository {
     final reminders = prefs.getBool(_cardRemindersKey);
     final appLock = prefs.getBool(_appLockKey);
     final testMode = prefs.getBool(_testModeKey);
+    final baseCurrency = prefs.getString(_baseCurrencyKey);
 
     return SettingsState(
       themeMode: _parseThemeMode(themeName),
@@ -24,6 +27,7 @@ class SettingsRepository {
       cardRemindersEnabled: reminders ?? true,
       appLockEnabled: appLock ?? false,
       testModeEnabled: testMode ?? false,
+      baseCurrency: baseCurrency ?? AppConfig.baseCurrency,
     );
   }
 
@@ -50,6 +54,11 @@ class SettingsRepository {
   Future<void> saveTestModeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_testModeKey, enabled);
+  }
+
+  Future<void> saveBaseCurrency(String currency) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_baseCurrencyKey, currency);
   }
 
   ThemeMode _parseThemeMode(String? value) {

@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/planned_expense.dart';
 import 'package:uuid/uuid.dart';
 
@@ -8,7 +9,7 @@ class Budget extends Equatable {
     required this.amount,
     required this.startDate,
     required this.endDate,
-    this.currency = 'EUR',
+    this.currency = AppConfig.baseCurrency,
     List<PlannedExpense>? plannedExpenses,
   }) : id = id ?? const Uuid().v4(),
        plannedExpenses = plannedExpenses ?? const [];
@@ -63,7 +64,7 @@ class Budget extends Equatable {
     return Budget(
       id: (map['id'] ?? '').toString(),
       amount: (map['amount'] as num).toDouble(),
-      currency: (map['currency'] as String?) ?? 'EUR',
+      currency: (map['currency'] as String?) ?? AppConfig.baseCurrency,
       startDate: DateTime.fromMillisecondsSinceEpoch(map['startDate'] as int),
       endDate: DateTime.fromMillisecondsSinceEpoch(map['endDate'] as int),
       plannedExpenses: planned

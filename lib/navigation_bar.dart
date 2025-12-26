@@ -17,14 +17,34 @@ class AppNavShell extends StatefulWidget {
 
 class _AppNavShellState extends State<AppNavShell> {
   int _index = 0;
+  late final ValueNotifier<int> _tabIndexNotifier;
 
   // Keep tab widgets alive to preserve state/animations when switching.
-  final _tabs = [
-    ExpenseDashboardPage(),
-    CreditCardManagementPage(),
-    AccountsPage(),
-    SettingsPage(),
-  ];
+  late final List<Widget> _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabIndexNotifier = ValueNotifier<int>(_index);
+    _tabs = [
+      const ExpenseDashboardPage(),
+      CreditCardManagementPage(
+        tabIndexListenable: _tabIndexNotifier,
+        tabIndex: 1,
+      ),
+      AccountsPage(
+        tabIndexListenable: _tabIndexNotifier,
+        tabIndex: 2,
+      ),
+      const SettingsPage(),
+    ];
+  }
+
+  @override
+  void dispose() {
+    _tabIndexNotifier.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +55,10 @@ class _AppNavShellState extends State<AppNavShell> {
       // Material 3 bottom nav
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          setState(() => _index = i);
+          _tabIndexNotifier.value = i;
+        },
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(

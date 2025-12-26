@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/cards/card_repository.dart';
@@ -27,6 +29,8 @@ class SettingsCubit extends Cubit<SettingsState> {
   final AppLockService _appLockService;
   final NotificationService _notificationService;
   final CardRepository _cardRepository;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   void setThemeMode(ThemeMode mode) {
     emit(state.copyWith(themeMode: mode));
@@ -61,15 +65,33 @@ class SettingsCubit extends Cubit<SettingsState> {
     _repository.saveTestModeEnabled(enabled);
   }
 
+  Future<void> setBaseCurrency(String currency) async {
+    emit(state.copyWith(baseCurrency: currency));
+    await _repository.saveBaseCurrency(currency);
+    await _persistUserSettings({'baseCurrency': currency});
+  }
+
   Future<void> setCardRemindersEnabled(bool enabled) async {
     emit(state.copyWith(cardRemindersEnabled: enabled));
     await _repository.saveCardRemindersEnabled(enabled);
+    await _persistUserSettings({'cardRemindersEnabled': enabled});
     try {
       await _notificationService.setCardRemindersEnabled(enabled);
       if (enabled) {
         final cards = await _cardRepository.fetchCards();
         await _notificationService.scheduleCardReminders(cards);
       }
+    } catch (_) {}
+  }
+
+  Future<void> _persistUserSettings(Map<String, dynamic> data) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .set(data, SetOptions(merge: true));
     } catch (_) {}
   }
 }

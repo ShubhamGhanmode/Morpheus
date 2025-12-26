@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/budget.dart';
+import 'package:morpheus/settings/settings_cubit.dart';
 
 class BudgetSheet extends StatefulWidget {
   const BudgetSheet({super.key, this.existing});
@@ -30,7 +33,8 @@ class _BudgetSheetState extends State<BudgetSheet> {
     _amountCtrl = TextEditingController(
       text: widget.existing?.amount.toStringAsFixed(0) ?? '',
     );
-    _currency = widget.existing?.currency ?? 'EUR';
+    final baseCurrency = context.read<SettingsCubit>().state.baseCurrency;
+    _currency = widget.existing?.currency ?? baseCurrency;
   }
 
   @override
@@ -80,10 +84,12 @@ class _BudgetSheetState extends State<BudgetSheet> {
               DropdownButtonFormField<String>(
                 value: _currency,
                 decoration: const InputDecoration(labelText: 'Currency'),
-                items: const ['EUR', 'INR', 'USD', 'GBP']
+                items: AppConfig.supportedCurrencies
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
-                onChanged: (v) => setState(() => _currency = v ?? 'EUR'),
+                onChanged: (v) => setState(() => _currency = v ?? _currency),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Select currency' : null,
               ),
               const SizedBox(height: 10),
               ListTile(

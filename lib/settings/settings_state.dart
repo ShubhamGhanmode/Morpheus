@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/theme/theme_contrast.dart';
 
 class SettingsState {
@@ -7,6 +8,7 @@ class SettingsState {
   final bool cardRemindersEnabled;
   final bool appLockEnabled;
   final bool testModeEnabled;
+  final String baseCurrency;
 
   const SettingsState({
     this.themeMode = ThemeMode.system,
@@ -14,6 +16,7 @@ class SettingsState {
     this.cardRemindersEnabled = true,
     this.appLockEnabled = false,
     this.testModeEnabled = false,
+    this.baseCurrency = AppConfig.baseCurrency,
   });
 
   SettingsState copyWith({
@@ -22,6 +25,7 @@ class SettingsState {
     bool? cardRemindersEnabled,
     bool? appLockEnabled,
     bool? testModeEnabled,
+    String? baseCurrency,
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
@@ -29,6 +33,7 @@ class SettingsState {
       cardRemindersEnabled: cardRemindersEnabled ?? this.cardRemindersEnabled,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       testModeEnabled: testModeEnabled ?? this.testModeEnabled,
+      baseCurrency: baseCurrency ?? this.baseCurrency,
     );
   }
 }

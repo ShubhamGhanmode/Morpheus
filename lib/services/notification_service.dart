@@ -7,8 +7,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:morpheus/utils/statement_dates.dart';
 
 import '../creditcard_management_page.dart';
 
@@ -28,6 +30,7 @@ class NotificationService {
 
   final _cardNotificationIds = <int>{};
   Future<void> _scheduleQueue = Future.value();
+  static const _cardReminderIdsKey = 'notifications.cardReminderIds';
 
   /// Call once during app startup.
   Future<void> initialize() async {
@@ -47,6 +50,7 @@ class NotificationService {
     await _local.initialize(
       const InitializationSettings(android: android, iOS: iOS),
     );
+    await _loadStoredCardReminderIds();
     _localReady = true;
   }
 
@@ -185,6 +189,7 @@ class NotificationService {
           );
         }
       }
+      await _persistCardReminderIds();
     });
     _scheduleQueue = next.catchError((_) {});
     return next;
@@ -276,6 +281,25 @@ class NotificationService {
     for (final id in toCancel) {
       await _local.cancel(id);
     }
+    await _persistCardReminderIds();
+  }
+
+  Future<void> _loadStoredCardReminderIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getStringList(_cardReminderIdsKey) ?? const [];
+    final parsed = stored
+        .map((e) => int.tryParse(e))
+        .whereType<int>()
+        .toList();
+    _cardNotificationIds
+      ..clear()
+      ..addAll(parsed);
+  }
+
+  Future<void> _persistCardReminderIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = _cardNotificationIds.map((e) => e.toString()).toList();
+    await prefs.setStringList(_cardReminderIdsKey, list);
   }
 
   Future<void> _persistToken(String token) async {
@@ -293,48 +317,31 @@ class NotificationService {
     });
   }
 
+  Future<void> deleteCurrentToken() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) return;
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('deviceTokens')
+          .doc(token)
+          .delete();
+    } catch (_) {}
+  }
+
   DateTime _nextDue(CreditCard card, {DateTime? anchor}) {
-    final now = anchor ?? DateTime.now();
-    final billingDay = card.billingDay.clamp(1, 28);
-    var cycleEnd = _safeDate(now.year, now.month, billingDay);
-    if (!now.isBefore(cycleEnd)) {
-      cycleEnd = _safeDate(now.year, now.month + 1, billingDay);
-    }
-    final dueDay = (billingDay + card.graceDays)
-        .clamp(1, _daysInMonth(cycleEnd.year, cycleEnd.month));
-    var due = _safeDate(cycleEnd.year, cycleEnd.month, dueDay);
-    if (due.isBefore(now)) {
-      final nextCycleEnd = _safeDate(cycleEnd.year, cycleEnd.month + 1, billingDay);
-      final nextDueDay = (billingDay + card.graceDays)
-          .clamp(1, _daysInMonth(nextCycleEnd.year, nextCycleEnd.month));
-      due = _safeDate(nextCycleEnd.year, nextCycleEnd.month, nextDueDay);
-    }
-    return due;
+    return nextDueDate(
+      now: anchor ?? DateTime.now(),
+      billingDay: card.billingDay,
+      graceDays: card.graceDays,
+    );
   }
 
   int _stableId(String seed) => seed.hashCode & 0x7fffffff;
 
   String _fmtDate(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-}
-
-int _daysInMonth(int year, int month) {
-  final nextMonth =
-      (month == 12) ? DateTime(year + 1, 1, 1) : DateTime(year, month + 1, 1);
-  return nextMonth.subtract(const Duration(days: 1)).day;
-}
-
-DateTime _safeDate(int year, int month, int day) {
-  var y = year;
-  var m = month;
-  while (m <= 0) {
-    m += 12;
-    y -= 1;
-  }
-  while (m > 12) {
-    m -= 12;
-    y += 1;
-  }
-  final clampedDay = day.clamp(1, _daysInMonth(y, m));
-  return DateTime(y, m, clampedDay);
 }

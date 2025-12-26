@@ -65,3 +65,12 @@ class ChangeMonth extends ExpenseEvent {
   @override
   List<Object?> get props => [month];
 }
+
+class SetBaseCurrency extends ExpenseEvent {
+  const SetBaseCurrency(this.currency);
+
+  final String currency;
+
+  @override
+  List<Object?> get props => [currency];
+}

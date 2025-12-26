@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/creditcard_management_page.dart';
 import 'package:morpheus/database/database_helper.dart' show DatabaseHelper;
 import 'package:morpheus/services/encryption_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// Persists credit cards locally (SQLite) and in Firestore under the user node.
@@ -19,6 +21,7 @@ class CardRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final DatabaseHelper _dbHelper;
+  static const _cacheUidKey = 'cards.cacheUid';
 
   String? get _uid => _auth.currentUser?.uid;
 
@@ -30,6 +33,7 @@ class CardRepository {
 
   Future<List<CreditCard>> fetchCards() async {
     final db = await _dbHelper.database;
+    await _ensureCacheScope(db);
     final rows = await db.query(
       'credit_cards',
       where: 'is_deleted = 0',
@@ -59,6 +63,7 @@ class CardRepository {
 
   Future<void> saveCard(CreditCard card) async {
     final db = await _dbHelper.database;
+    await _ensureCacheScope(db);
     await _upsertLocal(card, db);
 
     final remoteCollection = _remoteCollection;
@@ -69,6 +74,7 @@ class CardRepository {
 
   Future<void> deleteCard(String id) async {
     final db = await _dbHelper.database;
+    await _ensureCacheScope(db);
     await db.update(
       'credit_cards',
       {'is_deleted': 1, 'updated_at': DateTime.now().millisecondsSinceEpoch},
@@ -97,11 +103,24 @@ class CardRepository {
       'billing_day': card.billingDay,
       'grace_days': card.graceDays,
       'usage_limit': card.usageLimit,
+      'currency': card.currency,
+      'autopay_enabled': card.autopayEnabled ? 1 : 0,
       'reminder_enabled': card.reminderEnabled ? 1 : 0,
       'reminder_offsets': card.reminderOffsets.join(','),
       'is_synced': 1,
       'is_deleted': 0,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _ensureCacheScope(Database db) async {
+    final uid = _uid;
+    if (uid == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final cachedUid = prefs.getString(_cacheUidKey);
+    if (cachedUid != uid) {
+      await db.delete('credit_cards');
+      await prefs.setString(_cacheUidKey, uid);
+    }
   }
 
   CreditCard _fromDbRow(Map<String, Object?> row) {
@@ -128,6 +147,8 @@ class CardRepository {
       billingDay: (row['billing_day'] as int?) ?? 1,
       graceDays: (row['grace_days'] as int?) ?? 15,
       usageLimit: (row['usage_limit'] as num?)?.toDouble(),
+      currency: (row['currency'] as String?) ?? AppConfig.baseCurrency,
+      autopayEnabled: (row['autopay_enabled'] as int?) == 1,
       reminderEnabled: (row['reminder_enabled'] as int?) == 1,
       reminderOffsets: offsets,
     );
@@ -150,6 +171,8 @@ class CardRepository {
       'billingDay': card.billingDay,
       'graceDays': card.graceDays,
       'usageLimit': card.usageLimit,
+      'currency': card.currency,
+      'autopayEnabled': card.autopayEnabled,
       'reminderEnabled': card.reminderEnabled,
       'reminderOffsets': card.reminderOffsets,
     };
@@ -206,6 +229,9 @@ class CardRepository {
       billingDay: (data['billingDay'] ?? data['billing_day'] ?? 1) as int,
       graceDays: (data['graceDays'] ?? data['grace_days'] ?? 15) as int,
       usageLimit: (data['usageLimit'] as num?)?.toDouble(),
+      currency: (data['currency'] ?? data['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
+      autopayEnabled:
+          (data['autopayEnabled'] ?? data['autopay_enabled'] ?? false) as bool,
       reminderEnabled: (data['reminderEnabled'] ??
               data['reminder_enabled'] ??
               false) as bool,

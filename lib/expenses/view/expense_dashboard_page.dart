@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:morpheus/accounts/accounts_cubit.dart';
 import 'package:morpheus/accounts/accounts_repository.dart';
+import 'package:morpheus/categories/category_cubit.dart';
 import 'package:morpheus/cards/card_cubit.dart';
 import 'package:morpheus/cards/card_repository.dart';
 import 'package:morpheus/services/notification_service.dart';
@@ -20,19 +21,24 @@ import 'package:morpheus/expenses/view/widgets/expense_form_sheet.dart';
 import 'package:morpheus/expenses/view/widgets/planned_expense_sheet.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
 import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/config/app_config.dart';
+import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/settings/settings_state.dart';
+import 'package:morpheus/utils/card_balances.dart';
 
 class ExpenseDashboardPage extends StatelessWidget {
   const ExpenseDashboardPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final baseCurrency = context.read<SettingsCubit>().state.baseCurrency;
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => ExpenseBloc(ExpenseRepository())..add(const LoadExpenses())),
+        BlocProvider(create: (_) => ExpenseBloc(ExpenseRepository(), baseCurrency: baseCurrency)..add(const LoadExpenses())),
         BlocProvider(create: (_) => CardCubit(CardRepository())..loadCards()),
         BlocProvider(create: (_) => AccountsCubit(AccountsRepository())..load()),
       ],
-      child: const _ExpenseDashboardView(),
+      child: _ExpenseDashboardView(),
     );
   }
 }
@@ -42,23 +48,32 @@ class _ExpenseDashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final categoryLabels = {for (final c in context.watch<CategoryCubit>().state.items) c.name: c.label};
     Future<void> refreshAll() async {
       context.read<ExpenseBloc>().add(const LoadExpenses());
       await context.read<CardCubit>().loadCards();
       await context.read<AccountsCubit>().load();
     }
 
-    return BlocListener<CardCubit, CardState>(
-      listenWhen: (previous, current) => previous.cards != current.cards,
-      listener: (context, state) {
-        NotificationService.instance.scheduleCardReminders(state.cards);
-      },
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<CardCubit, CardState>(
+          listenWhen: (previous, current) => previous.cards != current.cards,
+          listener: (context, state) {
+            NotificationService.instance.scheduleCardReminders(state.cards);
+          },
+        ),
+        BlocListener<SettingsCubit, SettingsState>(
+          listenWhen: (previous, current) => previous.baseCurrency != current.baseCurrency,
+          listener: (context, state) {
+            context.read<ExpenseBloc>().add(SetBaseCurrency(state.baseCurrency));
+          },
+        ),
+      ],
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Expenses & Budget'),
-          actions: [
-            IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded), onPressed: () => refreshAll()),
-          ],
+          actions: [IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded), onPressed: () => refreshAll())],
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _openExpenseForm(context),
@@ -98,6 +113,7 @@ class _ExpenseDashboardView extends StatelessWidget {
                     focusMonth: state.focusMonth,
                     displayCurrency: state.displayCurrency,
                     budgetToEur: state.budgetToEur,
+                    eurToInr: state.eurToInr,
                     cards: cardState.cards,
                     accounts: accountState.items,
                   ),
@@ -105,22 +121,23 @@ class _ExpenseDashboardView extends StatelessWidget {
                   _CardSpendPanel(
                     expenses: state.expenses,
                     displayCurrency: state.displayCurrency,
-                    budgetToEur: state.budgetToEur,
                     cards: cardState.cards,
+                    eurToInr: state.eurToInr,
                   ),
                   const SizedBox(height: 12),
                   _UsableBudgetCard(state: state),
                   const SizedBox(height: 12),
                   _BurnChart(state: state),
                   const SizedBox(height: 12),
-                  _CategoryChart(state: state),
+                  _CategoryChart(state: state, categoryLabels: categoryLabels),
                   const SizedBox(height: 12),
-                  _BudgetCard(state: state),
+                  _BudgetCard(state: state, categoryLabels: categoryLabels),
                   const SizedBox(height: 12),
                   _ExpenseList(
                     state: state,
                     cards: cardState.cards,
                     accounts: accountState.items,
+                    categoryLabels: categoryLabels,
                     onViewAll: () => _openAllExpenses(context, state, cardState.cards, accountState.items),
                     onEdit: (expense) => _openExpenseForm(context, existing: expense),
                     onDelete: (expense) => _confirmDeleteExpense(context, expense),
@@ -138,11 +155,15 @@ class _ExpenseDashboardView extends StatelessWidget {
   Future<void> _openExpenseForm(BuildContext context, {Expense? existing}) async {
     final cardCubit = context.read<CardCubit>();
     final accountsCubit = context.read<AccountsCubit>();
+    final categoryCubit = context.read<CategoryCubit>();
+    final expenseBloc = context.read<ExpenseBloc>();
     final result = await showModalBottomSheet<Expense>(
       context: context,
       isScrollControlled: true,
       builder: (_) => MultiBlocProvider(
         providers: [
+          BlocProvider.value(value: expenseBloc),
+          BlocProvider.value(value: categoryCubit),
           BlocProvider.value(value: cardCubit),
           BlocProvider.value(value: accountsCubit),
         ],
@@ -165,15 +186,19 @@ class _ExpenseDashboardView extends StatelessWidget {
     List<CreditCard> cards,
     List<AccountCredential> accounts,
   ) async {
+    final categoryCubit = context.read<CategoryCubit>();
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AllExpensesPage(
-          expenses: state.expenses,
-          displayCurrency: state.displayCurrency,
-          budgetToEur: state.budgetToEur,
-          eurToInr: state.eurToInr,
-          cards: cards,
-          accounts: accounts,
+        builder: (_) => BlocProvider.value(
+          value: categoryCubit,
+          child: AllExpensesPage(
+            expenses: state.expenses,
+            displayCurrency: state.displayCurrency,
+            budgetToEur: state.budgetToEur,
+            eurToInr: state.eurToInr,
+            cards: cards,
+            accounts: accounts,
+          ),
         ),
       ),
     );
@@ -221,7 +246,7 @@ class _ExpenseDashboardView extends StatelessWidget {
 
     final buffer = StringBuffer();
     buffer.writeln('Expenses export (${DateFormat.yMMMd().format(range.start)} - ${DateFormat.yMMMd().format(range.end)})');
-    buffer.writeln('Title,Amount,Currency,Category,Date,PaymentSourceType,PaymentSourceId,Note');
+    buffer.writeln('Title,Amount,Currency,Category,Date,TransactionType,PaymentSourceType,PaymentSourceId,Note');
     for (final e in filtered) {
       buffer.writeln(
         '"${e.title.replaceAll('"', "'")}",'
@@ -229,6 +254,7 @@ class _ExpenseDashboardView extends StatelessWidget {
         '${e.currency},'
         '${e.category},'
         '${DateFormat('yyyy-MM-dd').format(e.date)},'
+        '${e.transactionType},'
         '${e.paymentSourceType},'
         '${e.paymentSourceId ?? '-'},'
         '"${(e.note ?? '').replaceAll('"', "'")}"',
@@ -309,7 +335,9 @@ class _ForexBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final text = rate == null ? 'Fetching EUR → INR...' : 'EUR → INR today: ₹${rate!.toStringAsFixed(2)}';
+    final text = rate == null
+        ? 'Fetching ${AppConfig.baseCurrency} to ${AppConfig.secondaryCurrency}...'
+        : '${AppConfig.baseCurrency} to ${AppConfig.secondaryCurrency} today: ${rate!.toStringAsFixed(2)}';
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -345,9 +373,22 @@ class _UsableBudgetCard extends StatelessWidget {
     final usable = state.usableBudget;
     final range = budget == null
         ? 'No budget set'
-        : '${DateFormat.MMMd().format(budget.startDate)} · ${DateFormat.MMMd().format(budget.endDate)}';
-    final budgetToEur = state.budgetToEur ?? (currency == 'EUR' ? 1.0 : null);
-    final usableEur = (budgetToEur != null && budgetToEur > 0) ? usable * budgetToEur : null;
+        : '${DateFormat.MMMd().format(budget.startDate)} - ${DateFormat.MMMd().format(budget.endDate)}';
+    final budgetToEur = state.budgetToEur ?? (currency == AppConfig.baseCurrency ? 1.0 : null);
+    final altCurrency = _alternateCurrency(currency);
+    final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+    double? altAmount() {
+      if (altFmt == null) return null;
+      if (currency == AppConfig.baseCurrency) {
+        final rate = state.eurToInr;
+        return rate != null ? usable * rate : null;
+      }
+      if (currency == AppConfig.secondaryCurrency) {
+        final rate = budgetToEur ?? (state.eurToInr != null && state.eurToInr! > 0 ? 1 / state.eurToInr! : null);
+        return rate != null ? usable * rate : null;
+      }
+      return null;
+    }
 
     return Card(
       child: Padding(
@@ -370,12 +411,12 @@ class _UsableBudgetCard extends StatelessWidget {
                   Text(range, style: theme.textTheme.bodySmall),
                   const SizedBox(height: 10),
                   Text(
-                    budget == null ? '—' : fmt.format(usable),
+                    budget == null ? '-' : fmt.format(usable),
                     style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
-                  if (budget != null && currency != 'EUR' && usableEur != null)
+                  if (budget != null && altAmount() != null && altFmt != null)
                     Text(
-                      '≈ ${NumberFormat.simpleCurrency(name: 'EUR').format(usableEur)} today',
+                      '~ ${altFmt.format(altAmount())} today',
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                 ],
@@ -396,12 +437,35 @@ class _MetricsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currency = state.displayCurrency;
+    final altCurrency = _alternateCurrency(currency);
+    final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+
+    double? altAmount(double value) {
+      if (altFmt == null) return null;
+      if (currency == AppConfig.baseCurrency) {
+        final rate = state.eurToInr;
+        return rate != null ? value * rate : null;
+      }
+      if (currency == AppConfig.secondaryCurrency) {
+        final rate = state.budgetToEur ?? (state.eurToInr != null && state.eurToInr! > 0 ? 1 / state.eurToInr! : null);
+        return rate != null ? value * rate : null;
+      }
+      return null;
+    }
+
+    String? altValue(double value) {
+      final converted = altAmount(value);
+      if (converted == null) return null;
+      return '~ ${altFmt!.format(converted)}';
+    }
+
     return Row(
       children: [
         Expanded(
           child: _MetricCard(
             title: 'This month',
             value: _money(state.monthlyTotal, currency),
+            altValue: altValue(state.monthlyTotal),
             subtitle: 'Spent in ${DateFormat.MMM().format(state.focusMonth)}',
             icon: Icons.calendar_month,
             color: Colors.indigo,
@@ -412,6 +476,7 @@ class _MetricsRow extends StatelessWidget {
           child: _MetricCard(
             title: 'This year',
             value: _money(state.annualTotal, currency),
+            altValue: altValue(state.annualTotal),
             subtitle: 'Year-to-date',
             icon: Icons.timeline,
             color: Colors.teal,
@@ -428,13 +493,21 @@ class _MetricsRow extends StatelessWidget {
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.title, required this.value, required this.subtitle, required this.icon, required this.color});
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    this.altValue,
+  });
 
   final String title;
   final String value;
   final String subtitle;
   final IconData icon;
   final Color color;
+  final String? altValue;
 
   @override
   Widget build(BuildContext context) {
@@ -452,6 +525,11 @@ class _MetricCard extends StatelessWidget {
             Text(title, style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            if (altValue != null)
+              Text(
+                altValue!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             const SizedBox(height: 2),
             Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
           ],
@@ -510,7 +588,8 @@ class _MonthlyLineChart extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('6-month burn', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            Divider(color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2), thickness: 2),
+            const SizedBox(height: 24),
             SizedBox(
               height: 200,
               child: LineChart(
@@ -554,25 +633,28 @@ class _MonthlyLineChart extends StatelessWidget {
   }
 
   double _amount(Expense expense) {
+    if (expense.transactionType == 'transfer') return 0;
     return _amountForDisplay(expense, displayCurrency, budgetToEur);
   }
 }
 
 class _CategoryChart extends StatelessWidget {
-  const _CategoryChart({required this.state});
+  const _CategoryChart({required this.state, required this.categoryLabels});
 
   final ExpenseState state;
+  final Map<String, String> categoryLabels;
 
   @override
   Widget build(BuildContext context) {
-    return _CategoryPieChart(categoryTotals: state.categoryTotals);
+    return _CategoryPieChart(categoryTotals: state.categoryTotals, categoryLabels: categoryLabels);
   }
 }
 
 class _CategoryPieChart extends StatelessWidget {
-  const _CategoryPieChart({required this.categoryTotals});
+  const _CategoryPieChart({required this.categoryTotals, required this.categoryLabels});
 
   final Map<String, double> categoryTotals;
+  final Map<String, String> categoryLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +716,7 @@ class _CategoryPieChart extends StatelessWidget {
                 for (var i = 0; i < items.length; i++)
                   Chip(
                     avatar: CircleAvatar(backgroundColor: Colors.primaries[i % Colors.primaries.length]),
-                    label: Text('${items[i].key} • ${items[i].value.toStringAsFixed(0)}'),
+                    label: Text('${_categoryLabel(items[i].key, categoryLabels)} - ${items[i].value.toStringAsFixed(0)}'),
                   ),
               ],
             ),
@@ -646,9 +728,10 @@ class _CategoryPieChart extends StatelessWidget {
 }
 
 class _BudgetCard extends StatelessWidget {
-  const _BudgetCard({required this.state});
+  const _BudgetCard({required this.state, required this.categoryLabels});
 
   final ExpenseState state;
+  final Map<String, String> categoryLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -656,8 +739,47 @@ class _BudgetCard extends StatelessWidget {
     final currency = budget?.currency ?? state.displayCurrency;
     final fmt = NumberFormat.simpleCurrency(name: currency);
     final spent = state.monthlyTotal;
-    final budgetToEur = state.budgetToEur ?? (currency == 'EUR' ? 1.0 : null);
-    final eurFmt = NumberFormat.simpleCurrency(name: 'EUR');
+    final budgetToEur = state.budgetToEur ?? (currency == AppConfig.baseCurrency ? 1.0 : null);
+    final altCurrency = _alternateCurrency(currency);
+    final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+
+    double? altAmount(double value) {
+      if (altFmt == null) return null;
+      if (currency == AppConfig.baseCurrency) {
+        final rate = state.eurToInr;
+        return rate != null ? value * rate : null;
+      }
+      if (currency == AppConfig.secondaryCurrency) {
+        final rate = budgetToEur ?? (state.eurToInr != null && state.eurToInr! > 0 ? 1 / state.eurToInr! : null);
+        return rate != null ? value * rate : null;
+      }
+      return null;
+    }
+
+    String? altText(double value) {
+      final converted = altAmount(value);
+      if (converted == null) return null;
+      return '~ ${altFmt!.format(converted)}';
+    }
+
+    Widget amountChip(IconData icon, String label, double value) {
+      final altValue = altText(value);
+      return Chip(
+        avatar: Icon(icon, size: 16),
+        label: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$label: ${fmt.format(value)}'),
+            if (altValue != null)
+              Text(
+                altValue,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+          ],
+        ),
+      );
+    }
 
     return Card(
       elevation: 0,
@@ -683,11 +805,22 @@ class _BudgetCard extends StatelessWidget {
               const Text('Set a monthly/period budget and we will track it for you.'),
             ] else ...[
               Text('${fmt.format(spent)} spent of ${fmt.format(budget.amount)}', style: Theme.of(context).textTheme.titleSmall),
-              if (currency != 'EUR' && budgetToEur != null) ...[
+              if (altFmt != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  '≈ ${eurFmt.format(budget.amount * budgetToEur)} budget today',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                Builder(
+                  builder: (context) {
+                    final altSpent = altAmount(spent);
+                    final altBudget = altAmount(budget.amount);
+                    if (altSpent == null || altBudget == null) {
+                      return const SizedBox.shrink();
+                    }
+                    return Text(
+                      '~ ${altFmt.format(altSpent)} spent of ${altFmt.format(altBudget)}',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    );
+                  },
                 ),
               ],
               const SizedBox(height: 8),
@@ -706,11 +839,8 @@ class _BudgetCard extends StatelessWidget {
                     avatar: const Icon(Icons.event, size: 16),
                     label: Text('${DateFormat.MMMd().format(budget.startDate)} - ${DateFormat.MMMd().format(budget.endDate)}'),
                   ),
-                  Chip(
-                    avatar: const Icon(Icons.schedule, size: 16),
-                    label: Text('Planned: ${fmt.format(state.reservedPlanned)}'),
-                  ),
-                  Chip(avatar: const Icon(Icons.balance, size: 16), label: Text('Usable: ${fmt.format(state.usableBudget)}')),
+                  amountChip(Icons.schedule, 'Planned', state.reservedPlanned),
+                  amountChip(Icons.balance, 'Usable', state.usableBudget),
                 ],
               ),
               const SizedBox(height: 12),
@@ -729,18 +859,36 @@ class _BudgetCard extends StatelessWidget {
                 const Text('No future expenses yet')
               else
                 Column(
-                  children: budget.plannedExpenses
-                      .map(
-                        (p) => ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.push_pin),
-                          title: Text(p.title),
-                          subtitle: Text(DateFormat.MMMd().format(p.dueDate)),
-                          trailing: Text(fmt.format(p.amount)),
-                        ),
-                      )
-                      .toList(),
+                  children: budget.plannedExpenses.map((p) {
+                    final categoryLabel = p.category == null ? null : _categoryLabel(p.category!, categoryLabels);
+                    final altValue = altAmount(p.amount);
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.push_pin),
+                      title: Text(p.title),
+                      subtitle: Text(
+                        categoryLabel == null
+                            ? DateFormat.MMMd().format(p.dueDate)
+                            : '${DateFormat.MMMd().format(p.dueDate)} - $categoryLabel',
+                      ),
+                      trailing: altValue == null || altFmt == null
+                          ? Text(fmt.format(p.amount))
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(fmt.format(p.amount)),
+                                Text(
+                                  '~ ${altFmt.format(altValue)}',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                    );
+                  }).toList(),
                 ),
             ],
           ],
@@ -762,10 +910,11 @@ class _BudgetCard extends StatelessWidget {
   }
 
   Future<void> _openPlannedExpenseSheet(BuildContext context, String budgetId) async {
+    final categoryCubit = context.read<CategoryCubit>();
     final result = await showModalBottomSheet<PlannedExpense>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const PlannedExpenseSheet(),
+      builder: (_) => BlocProvider.value(value: categoryCubit, child: const PlannedExpenseSheet()),
     );
     if (result != null) {
       // ignore: use_build_context_synchronously
@@ -779,6 +928,7 @@ class _ExpenseList extends StatelessWidget {
     required this.state,
     required this.cards,
     required this.accounts,
+    required this.categoryLabels,
     required this.onViewAll,
     required this.onEdit,
     required this.onDelete,
@@ -788,6 +938,7 @@ class _ExpenseList extends StatelessWidget {
   final ExpenseState state;
   final List<CreditCard> cards;
   final List<AccountCredential> accounts;
+  final Map<String, String> categoryLabels;
   final VoidCallback onViewAll;
   final void Function(Expense expense) onEdit;
   final void Function(Expense expense) onDelete;
@@ -817,8 +968,8 @@ class _ExpenseList extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
-    final eurFmt = NumberFormat.simpleCurrency(name: 'EUR');
-    final inrFmt = NumberFormat.simpleCurrency(name: 'INR');
+    final eurFmt = NumberFormat.simpleCurrency(name: AppConfig.baseCurrency);
+    final inrFmt = NumberFormat.simpleCurrency(name: AppConfig.secondaryCurrency);
     final monthLabel = DateFormat.yMMM().format(state.focusMonth);
     final items = state.expenses.take(10).toList();
 
@@ -834,7 +985,7 @@ class _ExpenseList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+            padding: const EdgeInsets.fromLTRB(16, 10, 14, 6),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [theme.colorScheme.primaryContainer, theme.colorScheme.secondaryContainer],
@@ -900,7 +1051,7 @@ class _ExpenseList extends StatelessWidget {
             InkWell(
               onTap: () => onEdit(items[i]),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -921,7 +1072,7 @@ class _ExpenseList extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${items[i].category} • ${DateFormat.MMMd().format(items[i].date)}',
+                            '${_categoryLabel(items[i].category, categoryLabels)} - ${DateFormat.MMMd().format(items[i].date)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall,
@@ -936,7 +1087,7 @@ class _ExpenseList extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -971,9 +1122,10 @@ class _ExpenseList extends StatelessWidget {
             if (i != items.length - 1) const Divider(height: 1),
           ],
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             child: SizedBox(
               width: double.infinity,
+              height: 45,
               child: FilledButton.tonalIcon(
                 onPressed: onViewAll,
                 style: FilledButton.styleFrom(
@@ -993,7 +1145,7 @@ class _ExpenseList extends StatelessWidget {
 
   Widget _dualAmount(Expense expense, ThemeData theme, NumberFormat eurFmt, NumberFormat inrFmt) {
     final eur = _amountInEur(expense);
-    final inr = _amountInInr(expense, eur);
+    final inr = AppConfig.enableSecondaryCurrency ? _amountInInr(expense, eur) : null;
     final lines = <Widget>[];
 
     if (eur != null) {
@@ -1015,17 +1167,17 @@ class _ExpenseList extends StatelessWidget {
   }
 
   double? _amountInEur(Expense expense) {
-    if (expense.currency == 'EUR') return expense.amount;
+    if (expense.currency == AppConfig.baseCurrency) return expense.amount;
     if (expense.amountEur != null) return expense.amountEur;
     final rate = state.eurToInr;
-    if (expense.currency == 'INR' && rate != null && rate > 0) {
+    if (expense.currency == AppConfig.secondaryCurrency && rate != null && rate > 0) {
       return expense.amount / rate;
     }
     return null;
   }
 
   double? _amountInInr(Expense expense, double? eurAmount) {
-    if (expense.currency == 'INR') return expense.amount;
+    if (expense.currency == AppConfig.secondaryCurrency) return expense.amount;
     final rate = state.eurToInr;
     if (eurAmount != null && rate != null) return eurAmount * rate;
     return null;
@@ -1054,7 +1206,7 @@ class _ExpenseList extends StatelessWidget {
       );
       final digits = card.cardNumber.replaceAll(RegExp(r'\\D'), '');
       final tail = digits.length >= 4 ? digits.substring(digits.length - 4) : '';
-      return 'Card ${card.bankName}${tail.isNotEmpty ? ' • $tail' : ''}';
+      return 'Card ${card.bankName}${tail.isNotEmpty ? ' - $tail' : ''}';
     }
     if (type == 'account') {
       final acct = accounts.firstWhere(
@@ -1153,6 +1305,7 @@ class _YearSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final categoryCubit = context.read<CategoryCubit>();
     final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
     final total = _totalFor(expenses, displayCurrency, budgetToEur);
     final categoryTotals = _categoryTotalsFor(expenses, displayCurrency, budgetToEur);
@@ -1176,14 +1329,17 @@ class _YearSection extends StatelessWidget {
               FilledButton.tonalIcon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => _ExpenseAnalyticsPage.year(
-                      year: year,
-                      expenses: expenses,
-                      displayCurrency: displayCurrency,
-                      budgetToEur: budgetToEur,
-                      eurToInr: eurToInr,
-                      cards: cards,
-                      accounts: accounts,
+                    builder: (_) => BlocProvider.value(
+                      value: categoryCubit,
+                      child: _ExpenseAnalyticsPage.year(
+                        year: year,
+                        expenses: expenses,
+                        displayCurrency: displayCurrency,
+                        budgetToEur: budgetToEur,
+                        eurToInr: eurToInr,
+                        cards: cards,
+                        accounts: accounts,
+                      ),
                     ),
                   ),
                 ),
@@ -1219,7 +1375,8 @@ class _YearSection extends StatelessWidget {
                     children: [
                       _infoChip(theme, Icons.receipt_long, '${expenses.length} expenses'),
                       _infoChip(theme, Icons.calendar_month, '${fmt.format(avgPerMonth)} avg/month'),
-                      if (topCategory != null) _infoChip(theme, Icons.category, '${topCategory.key} top'),
+                      if (topCategory != null)
+                        _infoChip(theme, Icons.category, '${_categoryLabelFromContext(context, topCategory.key)} top'),
                     ],
                   ),
                 ],
@@ -1288,6 +1445,7 @@ class _MonthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final categoryCubit = context.read<CategoryCubit>();
     final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
     final total = _totalFor(expenses, displayCurrency, budgetToEur);
     final categoryTotals = _categoryTotalsFor(expenses, displayCurrency, budgetToEur);
@@ -1309,15 +1467,18 @@ class _MonthCard extends StatelessWidget {
                 final button = FilledButton.tonalIcon(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => _ExpenseAnalyticsPage.month(
-                        year: year,
-                        month: month,
-                        expenses: expenses,
-                        displayCurrency: displayCurrency,
-                        budgetToEur: budgetToEur,
-                        eurToInr: eurToInr,
-                        cards: cards,
-                        accounts: accounts,
+                      builder: (_) => BlocProvider.value(
+                        value: categoryCubit,
+                        child: _ExpenseAnalyticsPage.month(
+                          year: year,
+                          month: month,
+                          expenses: expenses,
+                          displayCurrency: displayCurrency,
+                          budgetToEur: budgetToEur,
+                          eurToInr: eurToInr,
+                          cards: cards,
+                          accounts: accounts,
+                        ),
                       ),
                     ),
                   ),
@@ -1352,7 +1513,7 @@ class _MonthCard extends StatelessWidget {
                           Text(fmt.format(total), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                           if (topCategory != null)
                             Text(
-                              '${topCategory.key} top',
+                              '${_categoryLabelFromContext(context, topCategory.key)} top',
                               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                             ),
                         ],
@@ -1388,7 +1549,7 @@ class _MonthCard extends StatelessWidget {
                             Text(fmt.format(total), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                             if (topCategory != null)
                               Text(
-                                '${topCategory.key} top',
+                                '${_categoryLabelFromContext(context, topCategory.key)} top',
                                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                               ),
                           ],
@@ -1481,10 +1642,11 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
-    final eurFmt = NumberFormat.simpleCurrency(name: 'EUR');
-    final inrFmt = NumberFormat.simpleCurrency(name: 'INR');
+    final eurFmt = NumberFormat.simpleCurrency(name: AppConfig.baseCurrency);
+    final inrFmt = NumberFormat.simpleCurrency(name: AppConfig.secondaryCurrency);
 
     final filtered = expenses.where((e) {
+      if (e.transactionType == 'transfer') return false;
       if (e.date.year != year) return false;
       if (scope == _AnalyticsScope.month && e.date.month != month) return false;
       return true;
@@ -1500,6 +1662,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
     final topCategory = _topEntry(categoryTotals);
     final topSource = _topEntry(sourceTotals);
     final largest = _largestExpense(filtered);
+    final categoryLabels = {for (final c in context.watch<CategoryCubit>().state.items) c.name: c.label};
 
     final totalEur = _sumInEur(filtered);
     final totalInr = _sumInInr(filtered);
@@ -1603,7 +1766,8 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
                       Icons.local_fire_department,
                       '${largest.title} (${fmt.format(_amountForDisplay(largest, displayCurrency, budgetToEur))})',
                     ),
-                  if (topCategory != null) _metricChip(theme, Icons.category, '${topCategory.key} top'),
+                  if (topCategory != null)
+                    _metricChip(theme, Icons.category, '${_categoryLabelFromContext(context, topCategory.key)} top'),
                 ],
               ),
             ),
@@ -1611,11 +1775,11 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
           const SizedBox(height: 12),
           _buildTrendChart(theme, filtered),
           const SizedBox(height: 12),
-          _buildCategoryMix(theme, categoryTotals),
+          _buildCategoryMix(theme, categoryTotals, categoryLabels),
           const SizedBox(height: 12),
           _buildSources(theme, sourceTotals, fmt),
           const SizedBox(height: 12),
-          _buildInsights(theme, fmt, topCategory, topSource, largest, filtered),
+          _buildInsights(context, theme, fmt, topCategory, topSource, largest, filtered),
         ],
       ),
     );
@@ -1810,7 +1974,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildCategoryMix(ThemeData theme, Map<String, double> totals) {
+  Widget _buildCategoryMix(ThemeData theme, Map<String, double> totals, Map<String, String> categoryLabels) {
     if (totals.isEmpty) {
       return Card(
         elevation: 0,
@@ -1858,7 +2022,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
                 for (var i = 0; i < entries.length; i++)
                   Chip(
                     avatar: CircleAvatar(backgroundColor: Colors.primaries[i % Colors.primaries.length]),
-                    label: Text('${entries[i].key} • ${entries[i].value.toStringAsFixed(0)}'),
+                    label: Text('${_categoryLabel(entries[i].key, categoryLabels)} - ${entries[i].value.toStringAsFixed(0)}'),
                   ),
               ],
             ),
@@ -1908,6 +2072,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
   }
 
   Widget _buildInsights(
+    BuildContext context,
     ThemeData theme,
     NumberFormat fmt,
     MapEntry<String, double>? topCategory,
@@ -1917,7 +2082,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
   ) {
     final insights = <String>[];
     if (topCategory != null) {
-      insights.add('Most spend was on ${topCategory.key}.');
+      insights.add('Most spend was on ${_categoryLabelFromContext(context, topCategory.key)}.');
     }
     if (topSource != null) {
       insights.add('Top source: ${_labelForSourceKey(topSource.key, cards, accounts)}.');
@@ -1992,24 +2157,30 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
 double _amountForDisplay(Expense expense, String displayCurrency, double? budgetToEur) {
   final converted = expense.amountForCurrency(displayCurrency);
   if (displayCurrency == expense.currency) return converted;
-  if (displayCurrency == 'EUR' && expense.amountEur != null) return expense.amountEur!;
+  if (displayCurrency == AppConfig.baseCurrency && expense.amountEur != null) {
+    return expense.amountEur!;
+  }
   if (converted != expense.amount) return converted;
   if (displayCurrency == expense.budgetCurrency && expense.amountInBudgetCurrency != null) {
     return expense.amountInBudgetCurrency!;
   }
-  if (budgetToEur != null && budgetToEur > 0 && expense.amountEur != null && displayCurrency != 'EUR') {
+  if (budgetToEur != null && budgetToEur > 0 && expense.amountEur != null && displayCurrency != AppConfig.baseCurrency) {
     return expense.amountEur! / budgetToEur;
   }
   return converted;
 }
 
 double _totalFor(List<Expense> expenses, String displayCurrency, double? budgetToEur) {
-  return expenses.fold(0, (sum, e) => sum + _amountForDisplay(e, displayCurrency, budgetToEur));
+  return expenses.fold(0, (sum, e) {
+    if (e.transactionType == 'transfer') return sum;
+    return sum + _amountForDisplay(e, displayCurrency, budgetToEur);
+  });
 }
 
 Map<String, double> _categoryTotalsFor(List<Expense> expenses, String displayCurrency, double? budgetToEur) {
   final totals = <String, double>{};
   for (final e in expenses) {
+    if (e.transactionType == 'transfer') continue;
     final amount = _amountForDisplay(e, displayCurrency, budgetToEur);
     totals[e.category] = (totals[e.category] ?? 0) + amount;
   }
@@ -2019,6 +2190,7 @@ Map<String, double> _categoryTotalsFor(List<Expense> expenses, String displayCur
 Map<_SourceKey, double> _sourceTotalsFor(List<Expense> expenses, String displayCurrency, double? budgetToEur) {
   final totals = <_SourceKey, double>{};
   for (final e in expenses) {
+    if (e.transactionType == 'transfer') continue;
     final amount = _amountForDisplay(e, displayCurrency, budgetToEur);
     final key = _sourceKeyForExpense(e);
     totals[key] = (totals[key] ?? 0) + amount;
@@ -2031,22 +2203,39 @@ MapEntry<K, V>? _topEntry<K, V extends num>(Map<K, V> map) {
   return map.entries.reduce((a, b) => a.value > b.value ? a : b);
 }
 
+String _categoryLabel(String name, Map<String, String> labels) {
+  final label = labels[name];
+  return label == null || label.isEmpty ? name : label;
+}
+
+String _categoryLabelFromContext(BuildContext context, String name) {
+  final labels = {for (final c in context.watch<CategoryCubit>().state.items) c.name: c.label};
+  return _categoryLabel(name, labels);
+}
+
+String? _alternateCurrency(String currency) {
+  if (!AppConfig.enableSecondaryCurrency) return null;
+  if (currency == AppConfig.baseCurrency) return AppConfig.secondaryCurrency;
+  if (currency == AppConfig.secondaryCurrency) return AppConfig.baseCurrency;
+  return null;
+}
+
 _SourceKey _sourceKeyForExpense(Expense expense) {
   final type = (expense.paymentSourceType.isNotEmpty ? expense.paymentSourceType : 'cash').toLowerCase();
   return _SourceKey(type: type, id: expense.paymentSourceId ?? type);
 }
 
 double? _expenseAmountEur(Expense expense, double? eurToInr) {
-  if (expense.currency == 'EUR') return expense.amount;
+  if (expense.currency == AppConfig.baseCurrency) return expense.amount;
   if (expense.amountEur != null) return expense.amountEur;
-  if (expense.currency == 'INR' && eurToInr != null && eurToInr > 0) {
+  if (expense.currency == AppConfig.secondaryCurrency && eurToInr != null && eurToInr > 0) {
     return expense.amount / eurToInr;
   }
   return null;
 }
 
 double? _expenseAmountInr(Expense expense, double? eurToInr) {
-  if (expense.currency == 'INR') return expense.amount;
+  if (expense.currency == AppConfig.secondaryCurrency) return expense.amount;
   final eur = _expenseAmountEur(expense, eurToInr);
   if (eur != null && eurToInr != null) return eur * eurToInr;
   return null;
@@ -2073,7 +2262,7 @@ String _labelForSourceKey(_SourceKey key, List<CreditCard> cards, List<AccountCr
     );
     final digits = card.cardNumber.replaceAll(RegExp(r'\\D'), '');
     final tail = digits.length >= 4 ? digits.substring(digits.length - 4) : '';
-    return '${card.bankName}${tail.isNotEmpty ? ' • $tail' : ''}';
+    return '${card.bankName}${tail.isNotEmpty ? ' - $tail' : ''}';
   }
   if (key.type == 'account') {
     final acct = accounts.firstWhere(
@@ -2107,6 +2296,7 @@ class _SourceBreakdownCard extends StatefulWidget {
     required this.focusMonth,
     required this.displayCurrency,
     required this.budgetToEur,
+    required this.eurToInr,
     required this.cards,
     required this.accounts,
   });
@@ -2115,6 +2305,7 @@ class _SourceBreakdownCard extends StatefulWidget {
   final DateTime focusMonth;
   final String displayCurrency;
   final double? budgetToEur;
+  final double? eurToInr;
   final List<CreditCard> cards;
   final List<AccountCredential> accounts;
 
@@ -2133,6 +2324,22 @@ class _SourceBreakdownCardState extends State<_SourceBreakdownCard> {
     final accent = theme.colorScheme.tertiaryContainer;
     final onAccent = theme.colorScheme.onTertiaryContainer;
     final fmt = NumberFormat.simpleCurrency(name: widget.displayCurrency);
+    final altCurrency = _alternateCurrency(widget.displayCurrency);
+    final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+
+    double? altAmount(double value) {
+      if (altFmt == null) return null;
+      if (widget.displayCurrency == AppConfig.baseCurrency) {
+        final rate = widget.eurToInr;
+        return rate != null ? value * rate : null;
+      }
+      if (widget.displayCurrency == AppConfig.secondaryCurrency) {
+        final rate = widget.budgetToEur ?? (widget.eurToInr != null && widget.eurToInr! > 0 ? 1 / widget.eurToInr! : null);
+        return rate != null ? value * rate : null;
+      }
+      return null;
+    }
+
     final filtered = _filtered(widget.expenses, widget.focusMonth, _range);
     final totals = <_SourceKey, double>{};
     for (final e in filtered) {
@@ -2168,9 +2375,9 @@ class _SourceBreakdownCardState extends State<_SourceBreakdownCard> {
                       ChoiceChip(
                         label: Text(_labelForRange(r)),
                         selected: _range == r,
-                        labelStyle: TextStyle(color: onAccent),
-                        selectedColor: onAccent.withOpacity(0.18),
-                        backgroundColor: Colors.white.withOpacity(0.2),
+                        labelStyle: TextStyle(color: theme.colorScheme.onTertiaryFixedVariant),
+                        selectedColor: theme.colorScheme.tertiaryFixedDim,
+                        backgroundColor: theme.colorScheme.tertiaryFixedDim.withOpacity(0.75),
                         onSelected: (v) {
                           if (v) setState(() => _range = r);
                         },
@@ -2212,9 +2419,19 @@ class _SourceBreakdownCardState extends State<_SourceBreakdownCard> {
                             ],
                           ),
                         ),
-                        Text(
-                          fmt.format(entries[i].value),
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: onAccent),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              fmt.format(entries[i].value),
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: onAccent),
+                            ),
+                            if (altAmount(entries[i].value) != null && altFmt != null)
+                              Text(
+                                '~ ${altFmt.format(altAmount(entries[i].value))}',
+                                style: theme.textTheme.bodySmall?.copyWith(color: onAccent.withOpacity(0.8)),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -2228,13 +2445,18 @@ class _SourceBreakdownCardState extends State<_SourceBreakdownCard> {
   }
 
   List<Expense> _filtered(List<Expense> all, DateTime focusMonth, _SourceRange range) {
-    if (range == _SourceRange.all) return all;
+    if (range == _SourceRange.all) {
+      return all.where((e) => e.transactionType != 'transfer').toList();
+    }
     if (range == _SourceRange.year) {
-      return all.where((e) => e.date.year == focusMonth.year).toList();
+      return all.where((e) => e.transactionType != 'transfer').where((e) => e.date.year == focusMonth.year).toList();
     }
     final start = DateTime(focusMonth.year, focusMonth.month, 1);
     final end = DateTime(focusMonth.year, focusMonth.month + 1, 0, 23, 59, 59, 999);
-    return all.where((e) => !e.date.isBefore(start) && !e.date.isAfter(end)).toList();
+    return all
+        .where((e) => e.transactionType != 'transfer')
+        .where((e) => !e.date.isBefore(start) && !e.date.isAfter(end))
+        .toList();
   }
 
   String _labelFor(_SourceKey key) {
@@ -2258,7 +2480,7 @@ class _SourceBreakdownCardState extends State<_SourceBreakdownCard> {
       );
       final digits = card.cardNumber.replaceAll(RegExp(r'\\D'), '');
       final tail = digits.length >= 4 ? digits.substring(digits.length - 4) : '';
-      return '${card.bankName}${tail.isNotEmpty ? ' • $tail' : ''}';
+      return '${card.bankName}${tail.isNotEmpty ? ' - $tail' : ''}';
     }
     if (key.type == 'account') {
       final acct = widget.accounts.firstWhere(
@@ -2314,17 +2536,16 @@ class _SourceKey {
 }
 
 class _CardSpendPanel extends StatelessWidget {
-  const _CardSpendPanel({required this.expenses, required this.displayCurrency, required this.budgetToEur, required this.cards});
+  const _CardSpendPanel({required this.expenses, required this.displayCurrency, required this.cards, required this.eurToInr});
 
   final List<Expense> expenses;
   final String displayCurrency;
-  final double? budgetToEur;
   final List<CreditCard> cards;
+  final double? eurToInr;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
 
     if (cards.isEmpty) {
       return Card(
@@ -2361,11 +2582,27 @@ class _CardSpendPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ...cards.map((card) {
-              final window = _statementWindow(card);
-              final spendRaw = _statementSpend(card, window);
-              final spend = spendRaw < 0 ? 0.0 : spendRaw;
+              final cardCurrency = card.currency.isNotEmpty ? card.currency : displayCurrency;
+              final fmt = NumberFormat.simpleCurrency(name: cardCurrency);
+              final altCurrency = _alternateCurrency(cardCurrency);
+              final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+              final now = DateTime.now();
+              final primary = computeCardBalance(expenses: expenses, card: card, currency: cardCurrency, now: now);
+              double? altAmount(double value) {
+                if (altFmt == null) return null;
+                if (cardCurrency == AppConfig.baseCurrency) {
+                  return eurToInr != null ? value * eurToInr! : null;
+                }
+                if (cardCurrency == AppConfig.secondaryCurrency) {
+                  if (eurToInr == null || eurToInr == 0) return null;
+                  return value / eurToInr!;
+                }
+                return null;
+              }
+
+              final outstanding = primary.totalBalance;
               final limit = card.usageLimit;
-              final utilization = (limit != null && limit > 0) ? (spend / limit) : null;
+              final utilization = (limit != null && limit > 0) ? ((outstanding > 0 ? outstanding : 0) / limit) : null;
               final isOver = utilization != null && utilization >= 1;
               final nearing = utilization != null && utilization >= 0.9 && !isOver;
 
@@ -2389,7 +2626,7 @@ class _CardSpendPanel extends StatelessWidget {
                             children: [
                               Text(card.bankName, style: const TextStyle(fontWeight: FontWeight.w700)),
                               Text(
-                                'Stmt: ${DateFormat.MMMd().format(window.start)} → ${DateFormat.MMMd().format(window.end)}',
+                                'Stmt: ${DateFormat.MMMd().format(primary.window.start)} - ${DateFormat.MMMd().format(primary.window.end)}',
                                 style: theme.textTheme.bodySmall,
                               ),
                             ],
@@ -2398,8 +2635,17 @@ class _CardSpendPanel extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(fmt.format(spend), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                            if (limit != null) Text('of ${fmt.format(limit)}', style: theme.textTheme.bodySmall),
+                            Text(
+                              fmt.format(outstanding),
+                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            if (altAmount(outstanding) != null && altFmt != null)
+                              Text('~ ${altFmt.format(altAmount(outstanding))}', style: theme.textTheme.bodySmall),
+                            if (limit != null) ...[
+                              Text('of ${fmt.format(limit)}', style: theme.textTheme.bodySmall),
+                              if (altAmount(limit) != null && altFmt != null)
+                                Text('~ ${altFmt.format(altAmount(limit))}', style: theme.textTheme.bodySmall),
+                            ],
                           ],
                         ),
                       ],
@@ -2410,16 +2656,26 @@ class _CardSpendPanel extends StatelessWidget {
                       runSpacing: 6,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        _infoPill(theme, icon: Icons.event, label: 'Due ${DateFormat.MMMd().format(window.due)}'),
+                        _infoPill(theme, icon: Icons.event, label: 'Due ${DateFormat.MMMd().format(primary.window.due)}'),
                         _infoPill(theme, icon: Icons.receipt_long, label: 'Billing day ${card.billingDay}'),
+                        _infoPill(
+                          theme,
+                          icon: Icons.description_outlined,
+                          label: altAmount(primary.statementBalance) == null || altFmt == null
+                              ? 'Statement ${fmt.format(primary.statementBalance)}'
+                              : 'Statement ${fmt.format(primary.statementBalance)} (~ ${altFmt.format(altAmount(primary.statementBalance))})',
+                        ),
+                        _infoPill(
+                          theme,
+                          icon: Icons.swap_vert,
+                          label: altAmount(primary.unbilledBalance) == null || altFmt == null
+                              ? 'Unbilled ${fmt.format(primary.unbilledBalance)}'
+                              : 'Unbilled ${fmt.format(primary.unbilledBalance)} (~ ${altFmt.format(altAmount(primary.unbilledBalance))})',
+                        ),
                         if (card.reminderEnabled)
                           _infoPill(theme, icon: Icons.notifications_active, label: _reminderLabel(card), highlight: true),
                         if (utilization != null)
-                          _infoPill(
-                            theme,
-                            icon: Icons.percent,
-                            label: 'Utilization ${(utilization * 100).toStringAsFixed(0)}%',
-                          ),
+                          _infoPill(theme, icon: Icons.percent, label: 'Utilization ${(utilization * 100).toStringAsFixed(0)}%'),
                       ],
                     ),
                     if (limit != null) ...[
@@ -2464,29 +2720,6 @@ class _CardSpendPanel extends StatelessWidget {
     );
   }
 
-  _StatementWindow _statementWindow(CreditCard card) {
-    final now = DateTime.now();
-    final billingDay = card.billingDay.clamp(1, 28);
-    final currentBilling = _safeDate(now.year, now.month, billingDay);
-    final cycleEnd = now.isBefore(currentBilling) ? _safeDate(now.year, now.month - 1, billingDay) : currentBilling;
-
-    final startMonth = cycleEnd.month - 1 <= 0 ? cycleEnd.month + 11 : cycleEnd.month - 1;
-    final startYear = cycleEnd.month - 1 <= 0 ? cycleEnd.year - 1 : cycleEnd.year;
-    final cycleStart = _safeDate(startYear, startMonth, billingDay + 1);
-    final dueDay = (billingDay + card.graceDays).clamp(1, _daysInMonth(cycleEnd.year, cycleEnd.month));
-    final due = _safeDate(cycleEnd.year, cycleEnd.month, dueDay);
-    return _StatementWindow(start: cycleStart, end: cycleEnd, due: due);
-  }
-
-  double _statementSpend(CreditCard card, _StatementWindow window) {
-    final windowExpenses = expenses.where((e) {
-      final sameCard = e.paymentSourceType.toLowerCase() == 'card' && e.paymentSourceId == card.id;
-      if (!sameCard) return false;
-      return !e.date.isBefore(window.start) && !e.date.isAfter(window.end);
-    }).toList();
-    return windowExpenses.fold(0, (sum, e) => sum + _amountForDisplay(e, displayCurrency, budgetToEur));
-  }
-
   static String _reminderLabel(CreditCard card) {
     if (!card.reminderEnabled) return '';
     if (card.reminderOffsets.isEmpty) return 'Reminder on due';
@@ -2512,30 +2745,7 @@ class _CardSpendPanel extends StatelessWidget {
   }
 }
 
-class _StatementWindow {
-  _StatementWindow({required this.start, required this.end, required this.due});
-
-  final DateTime start;
-  final DateTime end;
-  final DateTime due;
-}
-
 int _daysInMonth(int year, int month) {
   final nextMonth = (month == 12) ? DateTime(year + 1, 1, 1) : DateTime(year, month + 1, 1);
   return nextMonth.subtract(const Duration(days: 1)).day;
-}
-
-DateTime _safeDate(int year, int month, int day) {
-  var y = year;
-  var m = month;
-  while (m <= 0) {
-    m += 12;
-    y -= 1;
-  }
-  while (m > 12) {
-    m -= 12;
-    y += 1;
-  }
-  final clampedDay = day.clamp(1, _daysInMonth(y, m));
-  return DateTime(y, m, clampedDay);
 }

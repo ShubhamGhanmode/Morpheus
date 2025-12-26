@@ -82,12 +82,7 @@ function nextDueInZone(card, zone, anchor) {
     ? safeDateInZone(now.year, now.month - 1, billingDay, zone)
     : currentBilling;
 
-  const dueDay = clamp(
-    billingDay + graceDays,
-    1,
-    cycleEnd.daysInMonth
-  );
-  let due = safeDateInZone(cycleEnd.year, cycleEnd.month, dueDay, zone);
+  let due = cycleEnd.plus({ days: graceDays });
 
   if (due < now) {
     const nextCycleEnd = safeDateInZone(
@@ -96,17 +91,7 @@ function nextDueInZone(card, zone, anchor) {
       billingDay,
       zone
     );
-    const nextDueDay = clamp(
-      billingDay + graceDays,
-      1,
-      nextCycleEnd.daysInMonth
-    );
-    due = safeDateInZone(
-      nextCycleEnd.year,
-      nextCycleEnd.month,
-      nextDueDay,
-      zone
-    );
+    due = nextCycleEnd.plus({ days: graceDays });
   }
 
   return due;
@@ -290,10 +275,28 @@ async function resolveUserTimezone(uid) {
   return resolveZone(zone);
 }
 
+async function getUserConfig(uid) {
+  const snap = await db.collection("users").doc(uid).get();
+  const data = snap.exists ? snap.data() : {};
+  const zone = resolveZone(data?.timezone);
+  const remindersEnabled = data?.cardRemindersEnabled !== false;
+  const baseCurrency =
+    typeof data?.baseCurrency === "string" && data.baseCurrency.length > 0
+      ? data.baseCurrency
+      : "EUR";
+  return { zone, remindersEnabled, baseCurrency };
+}
+
 function amountForCurrency(expense, target) {
   const amount = Number(expense.amount ?? 0);
   const currency = expense.currency;
   if (target === currency) return amount;
+  if (
+    expense.baseCurrency === target &&
+    expense.amountInBaseCurrency != null
+  ) {
+    return Number(expense.amountInBaseCurrency);
+  }
   if (target === "EUR" && expense.amountEur != null) {
     return Number(expense.amountEur);
   }
@@ -304,6 +307,9 @@ function amountForCurrency(expense, target) {
     if (expense.budgetRate != null) {
       return amount * Number(expense.budgetRate);
     }
+  }
+  if (expense.baseCurrency === target && expense.baseRate != null) {
+    return amount * Number(expense.baseRate);
   }
   return amount;
 }
@@ -399,7 +405,7 @@ exports.sendCardReminders = onSchedule(
       .collectionGroup("cards")
       .where("reminderEnabled", "==", true)
       .get();
-    const zoneCache = new Map();
+    const configCache = new Map();
     let scheduled = 0;
     let skipped = 0;
 
@@ -408,10 +414,15 @@ exports.sendCardReminders = onSchedule(
       const uid = cardDoc.ref.parent.parent?.id;
       if (!uid) continue;
 
-      let zone = zoneCache.get(uid);
-      if (!zone) {
-        zone = await resolveUserTimezone(uid);
-        zoneCache.set(uid, zone);
+      let config = configCache.get(uid);
+      if (!config) {
+        config = await getUserConfig(uid);
+        configCache.set(uid, config);
+      }
+      if (!config.remindersEnabled) {
+        await clearCardTasks(uid, cardDoc.id);
+        skipped += 1;
+        continue;
       }
 
       const tasksRef = db
@@ -433,7 +444,7 @@ exports.sendCardReminders = onSchedule(
           .sort((a, b) => a - b);
         const sameOffsets =
           JSON.stringify(existingOffsets) === JSON.stringify(desiredOffsets);
-        const sameZone = data?.timeZone === zone;
+        const sameZone = data?.timeZone === config.zone;
         const futureTasks = tasks.every((t) => {
           if (!t?.scheduledAt) return false;
           const dt = DateTime.fromISO(t.scheduledAt);
@@ -448,7 +459,12 @@ exports.sendCardReminders = onSchedule(
       }
 
       await clearCardTasks(uid, cardDoc.id);
-      const tasks = await scheduleCardTasks(uid, cardDoc.id, card, zone);
+      const tasks = await scheduleCardTasks(
+        uid,
+        cardDoc.id,
+        card,
+        config.zone
+      );
       if (tasks.length > 0) {
         scheduled += 1;
       } else {
@@ -477,6 +493,12 @@ exports.syncCardReminders = onDocumentWritten(
       return;
     }
 
+    const userConfig = await getUserConfig(uid);
+    if (!userConfig.remindersEnabled) {
+      await clearCardTasks(uid, cardId);
+      return;
+    }
+
     if (!after.reminderEnabled) {
       await clearCardTasks(uid, cardId);
       return;
@@ -493,7 +515,7 @@ exports.syncCardReminders = onDocumentWritten(
 
     if (!changed) return;
 
-    const zone = await resolveUserTimezone(uid);
+    const zone = userConfig.zone;
     await clearCardTasks(uid, cardId);
     await scheduleCardTasks(uid, cardId, after, zone);
   }
@@ -508,7 +530,9 @@ exports.syncUserTimezone = onDocumentWritten(
     if (!after) return;
     const beforeZone = resolveZone(before?.timezone);
     const afterZone = resolveZone(after?.timezone);
-    if (beforeZone === afterZone) return;
+    const beforeEnabled = before?.cardRemindersEnabled !== false;
+    const afterEnabled = after?.cardRemindersEnabled !== false;
+    if (beforeZone === afterZone && beforeEnabled === afterEnabled) return;
 
     const cardsSnap = await db
       .collection("users")
@@ -519,7 +543,9 @@ exports.syncUserTimezone = onDocumentWritten(
     for (const cardDoc of cardsSnap.docs) {
       const card = cardDoc.data();
       await clearCardTasks(uid, cardDoc.id);
-      await scheduleCardTasks(uid, cardDoc.id, card, afterZone);
+      if (afterEnabled) {
+        await scheduleCardTasks(uid, cardDoc.id, card, afterZone);
+      }
     }
   }
 );
@@ -552,6 +578,13 @@ exports.sendCardReminderTask = onRequest(
       .doc(uid)
       .collection("cards")
       .doc(cardId);
+    const userSnap = await db.collection("users").doc(uid).get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+    if (userData?.cardRemindersEnabled === false) {
+      await clearCardTasks(uid, cardId);
+      res.status(200).send("Reminders disabled");
+      return;
+    }
     const cardSnap = await cardRef.get();
     if (!cardSnap.exists) {
       await clearCardTasks(uid, cardId);
@@ -731,7 +764,12 @@ exports.computeMonthlyCardSnapshots = onSchedule(
 
     for (const [uid, cards] of cardsByUser.entries()) {
       const userSnap = await db.collection("users").doc(uid).get();
-      const zone = resolveZone(userSnap.data()?.timezone);
+      const userData = userSnap.data() ?? {};
+      const zone = resolveZone(userData?.timezone);
+      const baseCurrency =
+        typeof userData?.baseCurrency === "string" && userData.baseCurrency
+          ? userData.baseCurrency
+          : "EUR";
       const monthStart = DateTime.fromObject(
         {
           year: targetMonth.year,
@@ -760,8 +798,7 @@ exports.computeMonthlyCardSnapshots = onSchedule(
         .where("date", "<", endMs)
         .get();
 
-      const displayCurrency =
-        expensesSnap.docs[0]?.data()?.currency || "EUR";
+      const displayCurrency = baseCurrency;
       const summary = {};
 
       for (const [cardId, card] of cardsById.entries()) {
@@ -774,6 +811,8 @@ exports.computeMonthlyCardSnapshots = onSchedule(
           utilization: null,
           billingDay: Number(card.billingDay ?? 1),
           graceDays: Number(card.graceDays ?? 0),
+          currency: card.currency ?? "EUR",
+          autopayEnabled: card.autopayEnabled ?? false,
         };
       }
 
@@ -813,6 +852,7 @@ exports.computeMonthlyCardSnapshots = onSchedule(
             periodStart: startMs,
             periodEnd: endMs,
             displayCurrency,
+            baseCurrency,
             cards: summary,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },

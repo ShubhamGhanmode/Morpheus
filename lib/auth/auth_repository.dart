@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:morpheus/auth/auth_user.dart';
 import 'package:morpheus/services/auth_service.dart';
+import 'package:morpheus/services/notification_service.dart';
 
 /// Auth data access: fetches/refreshes tokens and exposes auth state changes.
 class AuthRepository {
@@ -30,6 +31,7 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
+    await NotificationService.instance.deleteCurrentToken();
     await AuthService.signOut();
   }
 }

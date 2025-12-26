@@ -72,9 +72,12 @@ dependencies:
   timezone: ^0.10.1
   flutter_timezone: ^5.0.1
   flutter_svg: ^2.2.3
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/services/http_client.dart';
 
 class ForexService {
@@ -28,7 +29,7 @@ class ForexService {
   }
 
   Future<double?> latestRate({
-    String base = 'EUR',
+    String base = AppConfig.baseCurrency,
     required String symbol,
   }) async {
     final uri = Uri.parse(

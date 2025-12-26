@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
+import 'package:morpheus/banks/bank_repository.dart';
+import 'package:morpheus/banks/bank_search_cubit.dart';
+import 'package:morpheus/config/app_config.dart';
+import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/widgets/color_picker.dart';
 
 class AccountFormSheet extends StatefulWidget {
   const AccountFormSheet({super.key, this.existing});
@@ -16,20 +22,16 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   late final TextEditingController _usernameCtrl;
   late final TextEditingController _passwordCtrl;
   late final TextEditingController _websiteCtrl;
+  late final TextEditingController _balanceCtrl;
+  late final BankSearchCubit _bankSearchCubit;
+  late String _currency;
   Color? _brandColor;
-
-  static const _palette = <Color>[
-    Color(0xFF0EA5E9),
-    Color(0xFF7C3AED),
-    Color(0xFF059669),
-    Color(0xFFF59E0B),
-    Color(0xFFEF4444),
-    Color(0xFF334155),
-  ];
+  String? _bankIconUrl;
 
   @override
   void initState() {
     super.initState();
+    _bankSearchCubit = BankSearchCubit(BankRepository())..preload();
     _bankCtrl = TextEditingController(text: widget.existing?.bankName ?? '');
     _usernameCtrl = TextEditingController(
       text: widget.existing?.username ?? '',
@@ -38,7 +40,15 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
       text: widget.existing?.password ?? '',
     );
     _websiteCtrl = TextEditingController(text: widget.existing?.website ?? '');
-    _brandColor = widget.existing?.brandColor ?? _palette.first;
+    _balanceCtrl = TextEditingController(
+      text: widget.existing != null
+          ? widget.existing!.balance.toStringAsFixed(2)
+          : '',
+    );
+    final baseCurrency = context.read<SettingsCubit>().state.baseCurrency;
+    _currency = widget.existing?.currency ?? baseCurrency;
+    _brandColor = widget.existing?.brandColor ?? AppColorPicker.defaultColor;
+    _bankIconUrl = widget.existing?.bankIconUrl;
   }
 
   @override
@@ -47,6 +57,8 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     _websiteCtrl.dispose();
+    _balanceCtrl.dispose();
+    _bankSearchCubit.close();
     super.dispose();
   }
 
@@ -81,10 +93,13 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _bankCtrl,
+                textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(labelText: 'Bank name'),
+                onChanged: (v) => _bankSearchCubit.search(v),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
+              _buildBankSuggestions(),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _usernameCtrl,
@@ -109,40 +124,38 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
                   labelText: 'Website (optional)',
                 ),
               ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _balanceCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Opening balance',
+                  helperText: 'Set the starting balance for this account',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  final parsed = double.tryParse(v.trim());
+                  if (parsed == null) return 'Enter a valid amount';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _currency,
+                decoration: const InputDecoration(labelText: 'Account currency'),
+                items: AppConfig.supportedCurrencies
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _currency = v ?? _currency),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Select currency' : null,
+              ),
               const SizedBox(height: 14),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _palette
-                      .map(
-                        (c) => GestureDetector(
-                          onTap: () => setState(() => _brandColor = c),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: c,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: _brandColor == c
-                                    ? Colors.black.withOpacity(0.4)
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
-                            ),
-                            child: _brandColor == c
-                                ? const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 16,
-                                  )
-                                : null,
-                          ),
-                        ),
-                      )
-                      .toList(),
+                child: AppColorPicker(
+                  selected: _brandColor ?? AppColorPicker.defaultColor,
+                  onChanged: (color) => setState(() => _brandColor = color),
                 ),
               ),
               const SizedBox(height: 16),
@@ -172,6 +185,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     final account = AccountCredential(
       id: widget.existing?.id,
       bankName: _bankCtrl.text.trim(),
+      bankIconUrl: _bankIconUrl,
       username: _usernameCtrl.text.trim(),
       password: _passwordCtrl.text.trim(),
       website: _websiteCtrl.text.trim().isEmpty
@@ -179,7 +193,98 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
           : _websiteCtrl.text.trim(),
       lastUpdated: DateTime.now(),
       brandColor: _brandColor,
+      currency: _currency,
+      balance: double.tryParse(_balanceCtrl.text.trim()) ??
+          (widget.existing?.balance ?? 0),
     );
     Navigator.of(context).pop(account);
+  }
+
+  Widget _buildBankSuggestions() {
+    return BlocBuilder<BankSearchCubit, BankSearchState>(
+      bloc: _bankSearchCubit,
+      builder: (context, state) {
+        if (state.suggestions.isEmpty && state.loading) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Loading banks...'),
+              ],
+            ),
+          );
+        }
+
+        if (state.suggestions.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'Suggestions',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  if (state.loading) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: state.suggestions
+                    .map(
+                      (name) => ActionChip(
+                        label: Text(name),
+                        onPressed: () => _onBankSelected(name),
+                        avatar: const Icon(Icons.account_balance, size: 16),
+                      ),
+                    )
+                    .toList(),
+              ),
+              if (state.error != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  state.error!,
+                  style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _onBankSelected(String name) {
+    _bankCtrl.text = name;
+    _bankCtrl.selection = TextSelection.collapsed(offset: name.length);
+    _prefillIcon();
+  }
+
+  Future<void> _prefillIcon() async {
+    if (_bankCtrl.text.isEmpty) return;
+    final repo = BankRepository();
+    final icon = await repo.findIconByName(_bankCtrl.text.trim());
+    if (mounted) {
+      setState(() => _bankIconUrl = icon);
+    }
   }
 }

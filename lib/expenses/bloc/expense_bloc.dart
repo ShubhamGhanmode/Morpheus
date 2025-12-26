@@ -1,18 +1,27 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/budget.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/models/planned_expense.dart';
 import 'package:morpheus/expenses/repositories/expense_repository.dart';
+import 'package:morpheus/expenses/services/expense_service.dart';
 import 'package:morpheus/services/forex_service.dart';
 
 part 'expense_event.dart';
 part 'expense_state.dart';
 
 class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
-  ExpenseBloc(this._repository, {ForexService? forexService})
-    : _forex = forexService ?? ForexService(),
-      super(ExpenseState.initial()) {
+  ExpenseBloc(
+    this._repository, {
+    ForexService? forexService,
+    ExpenseService? service,
+    String baseCurrency = AppConfig.baseCurrency,
+  })  : _forex = forexService ?? ForexService(),
+        _service =
+            service ??
+            ExpenseService(repository: _repository, forexService: forexService),
+        super(ExpenseState.initial(baseCurrency: baseCurrency)) {
     on<LoadExpenses>(_onLoadExpenses);
     on<AddExpense>(_onAddExpense);
     on<UpdateExpense>(_onUpdateExpense);
@@ -20,10 +29,12 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     on<SaveBudget>(_onSaveBudget);
     on<AddPlannedExpense>(_onAddPlannedExpense);
     on<ChangeMonth>(_onChangeMonth);
+    on<SetBaseCurrency>(_onSetBaseCurrency);
   }
 
   final ExpenseRepository _repository;
   final ForexService _forex;
+  final ExpenseService _service;
 
   Future<void> _onLoadExpenses(
     LoadExpenses event,
@@ -47,8 +58,11 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   ) async {
     emit(state.copyWith(loading: true, error: null));
     try {
-      final prepared = await _withRates(event.expense);
-      await _repository.addExpense(prepared);
+      final prepared = await _service.addExpense(
+        event.expense,
+        budgets: state.budgets,
+        baseCurrency: state.baseCurrency,
+      );
       final updatedExpenses = [prepared, ...state.expenses];
       final nextState = _recompute(
         updatedExpenses,
@@ -68,8 +82,11 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
   ) async {
     emit(state.copyWith(loading: true, error: null));
     try {
-      final prepared = await _withRates(event.expense);
-      await _repository.updateExpense(prepared);
+      final prepared = await _service.updateExpense(
+        event.expense,
+        budgets: state.budgets,
+        baseCurrency: state.baseCurrency,
+      );
       final updated = state.expenses
           .map((e) => e.id == prepared.id ? prepared : e)
           .toList();
@@ -149,11 +166,26 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     await _refreshRates(nextState, emit);
   }
 
+  Future<void> _onSetBaseCurrency(
+    SetBaseCurrency event,
+    Emitter<ExpenseState> emit,
+  ) async {
+    final nextState = _recompute(
+      state.expenses,
+      state.budgets,
+      state.focusMonth,
+      baseCurrency: event.currency,
+    );
+    emit(nextState.copyWith(baseCurrency: event.currency));
+    await _refreshRates(nextState, emit);
+  }
+
   ExpenseState _recompute(
     List<Expense> expenses,
     List<Budget> budgets,
-    DateTime focusMonth,
-  ) {
+    DateTime focusMonth, {
+    String? baseCurrency,
+  }) {
     final monthStart = DateTime(focusMonth.year, focusMonth.month, 1);
     final monthEnd = DateTime(
       focusMonth.year,
@@ -166,14 +198,16 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     );
 
     final activeBudget = _budgetForMonth(budgets, focusMonth);
-    final displayCurrency =
-        activeBudget?.currency ??
-        (expenses.isNotEmpty ? expenses.first.currency : 'EUR');
-    final budgetToEur = activeBudget?.currency == 'EUR'
+    final resolvedBase = baseCurrency ?? state.baseCurrency;
+    final displayCurrency = activeBudget?.currency ?? resolvedBase;
+    final budgetToEur = activeBudget?.currency == AppConfig.baseCurrency
         ? 1.0
         : state.budgetToEur;
 
-    final monthly = expenses
+    final spendOnly = expenses
+        .where((e) => e.transactionType != 'transfer')
+        .toList();
+    final monthly = spendOnly
         .where((e) => !e.date.isBefore(monthStart) && !e.date.isAfter(monthEnd))
         .toList();
     final monthTotal = monthly.fold<double>(
@@ -184,10 +218,12 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     final monthTotalEur = monthly.fold<double>(
       0,
       (sum, e) =>
-          sum + (e.amountEur ?? (e.currency == 'EUR' ? e.amount : e.amount)),
+          sum +
+          (e.amountEur ??
+              (e.currency == AppConfig.baseCurrency ? e.amount : e.amount)),
     );
 
-    final annualExpenses = expenses
+    final annualExpenses = spendOnly
         .where((e) => e.date.year == focusMonth.year)
         .toList();
     final annualTotal = annualExpenses.fold<double>(
@@ -198,7 +234,9 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     final annualTotalEur = annualExpenses.fold<double>(
       0,
       (sum, e) =>
-          sum + (e.amountEur ?? (e.currency == 'EUR' ? e.amount : e.amount)),
+          sum +
+          (e.amountEur ??
+              (e.currency == AppConfig.baseCurrency ? e.amount : e.amount)),
     );
 
     final Map<String, double> categoryTotals = {};
@@ -226,63 +264,8 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
       categoryTotals: categoryTotals,
       reservedPlanned: reservedPlanned,
       usableBudget: usableBudget,
+      baseCurrency: resolvedBase,
       displayCurrency: displayCurrency,
-    );
-  }
-
-  Future<Expense> _withRates(Expense expense, {List<Budget>? budgets}) async {
-    final allBudgets = budgets ?? state.budgets;
-    final budget = _budgetForDate(allBudgets, expense.date);
-    final budgetCurrency = budget?.currency;
-
-    double? rateToBudget;
-    double? rateToEur;
-
-    final symbols = <String>{'EUR'};
-    if (budgetCurrency != null && budgetCurrency != expense.currency) {
-      symbols.add(budgetCurrency);
-    }
-
-    try {
-      if (symbols.isNotEmpty) {
-        final rates = await _forex.fetchRates(
-          date: expense.date,
-          base: expense.currency,
-          symbols: symbols.toList(),
-        );
-        rateToEur = rates['EUR'];
-        if (budgetCurrency != null) {
-          rateToBudget = rates[budgetCurrency];
-        }
-      }
-    } catch (_) {
-      // keep fallbacks below
-    }
-
-    final amountEur = expense.currency == 'EUR'
-        ? expense.amount
-        : rateToEur != null
-        ? expense.amount * rateToEur
-        : expense.amount;
-
-    double? amountInBudgetCurrency;
-    if (budgetCurrency != null) {
-      if (budgetCurrency == expense.currency) {
-        rateToBudget = 1;
-        amountInBudgetCurrency = expense.amount;
-      } else if (rateToBudget != null) {
-        amountInBudgetCurrency = expense.amount * rateToBudget;
-      } else if (budgetCurrency == 'EUR' && amountEur != null) {
-        amountInBudgetCurrency = amountEur;
-      }
-    }
-
-    return expense.copyWith(
-      budgetCurrency: budgetCurrency ?? expense.budgetCurrency,
-      budgetRate: rateToBudget ?? expense.budgetRate,
-      amountInBudgetCurrency:
-          amountInBudgetCurrency ?? expense.amountInBudgetCurrency,
-      amountEur: amountEur,
     );
   }
 
@@ -293,19 +276,6 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     return budgets.isNotEmpty ? budgets.first : null;
   }
 
-  Budget? _budgetForDate(List<Budget> budgets, DateTime date) {
-    for (final b in budgets) {
-      final starts = !date.isBefore(
-        DateTime(b.startDate.year, b.startDate.month, b.startDate.day),
-      );
-      final ends = !date.isAfter(
-        DateTime(b.endDate.year, b.endDate.month, b.endDate.day, 23, 59, 59),
-      );
-      if (starts && ends) return b;
-    }
-    return null;
-  }
-
   double _amountInDisplayCurrency(
     Expense expense,
     String displayCurrency,
@@ -314,7 +284,7 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     final converted = expense.amountForCurrency(displayCurrency);
     if (displayCurrency == expense.currency) return converted;
 
-    if (displayCurrency == 'EUR' && expense.amountEur != null) {
+    if (displayCurrency == AppConfig.baseCurrency && expense.amountEur != null) {
       return expense.amountEur!;
     }
 
@@ -328,7 +298,7 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     if (budgetToEur != null &&
         budgetToEur > 0 &&
         expense.amountEur != null &&
-        displayCurrency != 'EUR') {
+        displayCurrency != AppConfig.baseCurrency) {
       return expense.amountEur! / budgetToEur;
     }
 
@@ -342,18 +312,26 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
     double? eurToInr = baseState.eurToInr;
     double? budgetToEur = baseState.budgetToEur;
 
-    try {
-      eurToInr = await _forex.latestRate(base: 'EUR', symbol: 'INR');
-    } catch (_) {
-      // ignore, keep previous value
+    if (AppConfig.enableSecondaryCurrency) {
+      try {
+        eurToInr = await _forex.latestRate(
+          base: AppConfig.baseCurrency,
+          symbol: AppConfig.secondaryCurrency,
+        );
+      } catch (_) {
+        // ignore, keep previous value
+      }
+    } else {
+      eurToInr = null;
     }
 
     final activeBudget = baseState.activeBudget;
-    if (activeBudget != null && activeBudget.currency != 'EUR') {
+    if (activeBudget != null &&
+        activeBudget.currency != AppConfig.baseCurrency) {
       try {
         budgetToEur = await _forex.latestRate(
           base: activeBudget.currency,
-          symbol: 'EUR',
+          symbol: AppConfig.baseCurrency,
         );
       } catch (_) {
         // ignore

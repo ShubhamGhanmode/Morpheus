@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/auth/auth_bloc.dart';
 import 'package:morpheus/auth/auth_repository.dart';
+import 'package:morpheus/categories/category_cubit.dart';
+import 'package:morpheus/categories/category_repository.dart';
 import 'package:morpheus/navigation_bar.dart';
 import 'package:morpheus/services/auth_service.dart';
 import 'package:morpheus/services/notification_service.dart';
@@ -126,7 +128,10 @@ class AuthGate extends StatelessWidget {
         }
 
         if (state is AuthAuthenticated) {
-          return const AppNavShell();
+          return BlocProvider(
+            create: (_) => CategoryCubit(CategoryRepository())..load(),
+            child: const AppNavShell(),
+          );
         }
 
         if (state is AuthFailure) {

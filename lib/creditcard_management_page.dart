@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -8,12 +9,19 @@ import 'package:intl/intl.dart';
 import 'package:morpheus/accounts/accounts_cubit.dart';
 import 'package:morpheus/accounts/accounts_repository.dart';
 import 'package:morpheus/add_card_dialog.dart';
+import 'package:morpheus/bills_calendar_page.dart';
+import 'package:morpheus/cards/card_ledger_page.dart';
 import 'package:morpheus/cards/card_cubit.dart';
 import 'package:morpheus/cards/card_repository.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/repositories/expense_repository.dart';
+import 'package:morpheus/expenses/services/expense_service.dart';
+import 'package:morpheus/services/forex_service.dart';
 import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/utils/card_balances.dart';
+import 'package:morpheus/utils/statement_dates.dart';
 
 class CreditCard {
   final String id;
@@ -31,6 +39,8 @@ class CreditCard {
   final int billingDay;
   final int graceDays;
   final double? usageLimit;
+  final String currency;
+  final bool autopayEnabled;
   final bool reminderEnabled;
   final List<int> reminderOffsets;
 
@@ -50,6 +60,8 @@ class CreditCard {
     this.billingDay = 1,
     this.graceDays = 15,
     this.usageLimit,
+    this.currency = AppConfig.baseCurrency,
+    this.autopayEnabled = false,
     this.reminderEnabled = false,
     this.reminderOffsets = const [],
   });
@@ -70,6 +82,8 @@ class CreditCard {
     int? billingDay,
     int? graceDays,
     double? usageLimit,
+    String? currency,
+    bool? autopayEnabled,
     bool? reminderEnabled,
     List<int>? reminderOffsets,
   }) {
@@ -89,6 +103,8 @@ class CreditCard {
       billingDay: billingDay ?? this.billingDay,
       graceDays: graceDays ?? this.graceDays,
       usageLimit: usageLimit ?? this.usageLimit,
+      currency: currency ?? this.currency,
+      autopayEnabled: autopayEnabled ?? this.autopayEnabled,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       reminderOffsets: reminderOffsets ?? this.reminderOffsets,
     );
@@ -112,6 +128,8 @@ class CreditCard {
       'billingDay': billingDay,
       'graceDays': graceDays,
       'usageLimit': usageLimit,
+      'currency': currency,
+      'autopayEnabled': autopayEnabled,
       'reminderEnabled': reminderEnabled,
       'reminderOffsets': reminderOffsets,
     };
@@ -141,6 +159,8 @@ class CreditCard {
       billingDay: (data['billingDay'] ?? data['billing_day'] ?? 1) as int,
       graceDays: (data['graceDays'] ?? data['grace_days'] ?? 15) as int,
       usageLimit: (data['usageLimit'] as num?)?.toDouble(),
+      currency: (data['currency'] ?? data['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
+      autopayEnabled: (data['autopayEnabled'] ?? data['autopay_enabled'] ?? false) as bool,
       reminderEnabled: (data['reminderEnabled'] ?? data['reminder_enabled'] ?? false) as bool,
       reminderOffsets: (data['reminderOffsets'] as List?)?.map((e) => (e as num).toInt()).toList() ?? const [],
     );
@@ -148,6 +168,11 @@ class CreditCard {
 }
 
 class CreditCardManagementPage extends StatefulWidget {
+  const CreditCardManagementPage({super.key, this.tabIndexListenable, this.tabIndex});
+
+  final ValueListenable<int>? tabIndexListenable;
+  final int? tabIndex;
+
   @override
   State<CreditCardManagementPage> createState() => _CreditCardManagementPageState();
 }
@@ -162,10 +187,14 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
   late final CardCubit _cardCubit;
   late final AccountsCubit _accountsCubit;
   final ExpenseRepository _expenseRepository = ExpenseRepository();
+  final ExpenseService _expenseService = ExpenseService();
+  final ForexService _forexService = ForexService();
+  final Map<String, Future<double?>> _rateCache = {};
   bool _expensesLoading = false;
   List<Expense> _expenses = [];
   bool _revealSensitive = false;
   static const _networkAssets = {'visa': 'assets/visa.svg', 'mastercard': 'assets/mastercard.svg'};
+  VoidCallback? _tabListener;
 
   Future<void> _onAddCard() async {
     // Expecting your dialog to return either a CreditCard or a Map<String, dynamic>
@@ -193,6 +222,8 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
         billingDay: (result['billingDay'] as int?)?.clamp(1, 28) ?? 1,
         graceDays: (result['graceDays'] as int?)?.clamp(0, 90) ?? 15,
         usageLimit: (result['usageLimit'] as num?)?.toDouble(),
+        currency: (result['currency'] ?? result['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
+        autopayEnabled: result['autopayEnabled'] as bool? ?? false,
         reminderEnabled: result['reminderEnabled'] as bool? ?? false,
         reminderOffsets: (result['reminderOffsets'] as List?)?.map((e) => (e as num).toInt()).toList() ?? const [],
       );
@@ -281,10 +312,21 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       begin: 0.95,
       end: 1,
     ).animate(CurvedAnimation(parent: _detailsController, curve: Curves.easeOutBack));
+
+    _tabListener = () {
+      final selected = widget.tabIndexListenable?.value;
+      if (selected == widget.tabIndex) {
+        _refreshData();
+      }
+    };
+    widget.tabIndexListenable?.addListener(_tabListener!);
   }
 
   @override
   void dispose() {
+    if (_tabListener != null) {
+      widget.tabIndexListenable?.removeListener(_tabListener!);
+    }
     _shimmerController.dispose();
     _cardTransitionController.dispose();
     _detailsController.dispose();
@@ -307,6 +349,12 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     _detailsController.forward();
   }
 
+  Future<void> _refreshData() async {
+    await _cardCubit.loadCards();
+    await _accountsCubit.load();
+    await _loadExpenses();
+  }
+
   Future<void> _loadExpenses() async {
     setState(() => _expensesLoading = true);
     try {
@@ -320,6 +368,22 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       if (!mounted) return;
       setState(() => _expensesLoading = false);
     }
+  }
+
+  void _openBillsCalendar(String baseCurrency) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BillsCalendarPage(cards: cards, expenses: _expenses, baseCurrency: baseCurrency),
+      ),
+    );
+  }
+
+  void _openCardLedger(CreditCard card, String baseCurrency) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CardLedgerPage(card: card, expenses: _expenses, baseCurrency: baseCurrency),
+      ),
+    );
   }
 
   List<CreditCard> get availableCards => cards.where((c) => c.id != selectedCard?.id).toList();
@@ -353,10 +417,18 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
           builder: (context, state) {
             final loading = state.loading && cards.isEmpty;
             final settings = context.watch<SettingsCubit>().state;
-            final displayCurrency = _expenses.isNotEmpty ? _expenses.first.currency : 'EUR';
-            final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
+            final baseCurrency = settings.baseCurrency;
             return Scaffold(
-              appBar: AppBar(title: const Text('My Cards')),
+              appBar: AppBar(
+                title: const Text('My Cards'),
+                actions: [
+                  IconButton(
+                    tooltip: 'Bills calendar',
+                    icon: const Icon(Icons.calendar_month),
+                    onPressed: () => _openBillsCalendar(settings.baseCurrency),
+                  ),
+                ],
+              ),
               body: loading
                   ? const Center(child: CircularProgressIndicator())
                   : ListView(
@@ -381,8 +453,11 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                           const SizedBox(height: 12),
                           _buildCardSummary(
                             card: selectedCard!,
-                            fmt: fmt,
-                            displayCurrency: displayCurrency,
+                            fmt: NumberFormat.simpleCurrency(
+                              name: selectedCard!.currency.isNotEmpty ? selectedCard!.currency : baseCurrency,
+                            ),
+                            displayCurrency: selectedCard!.currency.isNotEmpty ? selectedCard!.currency : baseCurrency,
+                            baseCurrency: baseCurrency,
                             testMode: settings.testModeEnabled,
                           ),
                         ],
@@ -566,11 +641,20 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                 ),
                 SizedBox(height: 12),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildCardField("CARD HOLDER", card.holderName, card.textColor),
-                    _buildCardField("EXPIRES", card.expiryDate, card.textColor),
-                    _buildCardField("CVV", _displayCvv(card), card.textColor),
+                    Expanded(
+                      child: _buildCardField(
+                        "CARD HOLDER",
+                        card.holderName,
+                        card.textColor,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildCardField("EXPIRES", card.expiryDate, card.textColor, align: CrossAxisAlignment.end),
+                    const SizedBox(width: 12),
+                    _buildCardField("CVV", _displayCvv(card), card.textColor, align: CrossAxisAlignment.end),
                   ],
                 ),
               ],
@@ -585,21 +669,65 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     required CreditCard card,
     required NumberFormat fmt,
     required String displayCurrency,
+    required String baseCurrency,
     required bool testMode,
   }) {
-    final stats = _cardStats(card, displayCurrency);
+    final stats = _cardStats(card, displayCurrency, baseCurrency);
     final window = stats.window;
     final periodLabel = '${DateFormat.MMMd().format(window.start)} - ${DateFormat.MMMd().format(window.end)}';
     final dueLabel = DateFormat.MMMd().format(window.due);
     final limit = card.usageLimit;
     final utilization = stats.utilization;
     final nearLimit = utilization != null && utilization >= 0.9;
+    final forecast = _buildUtilizationForecast(card, stats, fmt);
+    final altCurrency = _alternateCurrency(displayCurrency);
+    final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
+
+    Widget buildMetrics(double? rate) {
+      String? altText(double value) {
+        if (altFmt == null) return null;
+        final converted = rate != null ? value * rate : value;
+        return '~ ${altFmt.format(converted)}';
+      }
+
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          _metricTile(
+            icon: Icons.receipt_long,
+            label: 'Statement balance',
+            value: fmt.format(stats.statementBalance),
+            subtitle: altText(stats.statementBalance),
+          ),
+          _metricTile(
+            icon: Icons.trending_up,
+            label: 'Unbilled balance',
+            value: fmt.format(stats.unbilledBalance),
+            subtitle: altText(stats.unbilledBalance),
+          ),
+          _metricTile(
+            icon: Icons.payments_outlined,
+            label: 'Payments',
+            value: fmt.format(stats.statementPayments),
+            subtitle: altText(stats.statementPayments),
+          ),
+          if (limit != null)
+            _metricTile(
+              icon: Icons.savings_outlined,
+              label: 'Available limit',
+              value: fmt.format(stats.available ?? limit),
+              subtitle: altText(stats.available ?? limit),
+            ),
+        ],
+      );
+    }
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -611,20 +739,13 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _metricTile(icon: Icons.receipt_long, label: 'Statement spend', value: fmt.format(stats.netSpend)),
-                _metricTile(icon: Icons.payments_outlined, label: 'Payments', value: fmt.format(stats.payments)),
-                if (limit != null)
-                  _metricTile(
-                    icon: Icons.savings_outlined,
-                    label: 'Available limit',
-                    value: fmt.format(stats.available ?? limit),
-                  ),
-              ],
-            ),
+            if (altCurrency == null)
+              buildMetrics(null)
+            else
+              FutureBuilder<double?>(
+                future: _rateFor(displayCurrency, altCurrency),
+                builder: (context, snap) => buildMetrics(snap.data),
+              ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -632,6 +753,8 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
               children: [
                 _infoChip(Icons.schedule, periodLabel),
                 _infoChip(Icons.calendar_today, 'Billing day ${card.billingDay}'),
+                _infoChip(Icons.currency_exchange, 'Currency ${card.currency}'),
+                if (card.autopayEnabled) _infoChip(Icons.auto_mode_rounded, 'Autopay on'),
                 if (card.reminderEnabled) _infoChip(Icons.notifications_active, _reminderLabel(card)),
               ],
             ),
@@ -651,6 +774,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                 ),
               ),
             ],
+            if (forecast != null) ...[const SizedBox(height: 12), forecast],
             const SizedBox(height: 12),
             Wrap(
               spacing: 12,
@@ -659,7 +783,12 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                 FilledButton.icon(
                   onPressed: () => _recordPayment(card, displayCurrency),
                   icon: const Icon(Icons.payments_rounded),
-                  label: const Text('Record payment'),
+                  label: const Text('Record'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _openCardLedger(card, baseCurrency),
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('Transactions'),
                 ),
                 if (testMode)
                   OutlinedButton.icon(
@@ -681,7 +810,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     );
   }
 
-  Widget _metricTile({required IconData icon, required String label, required String value}) {
+  Widget _metricTile({required IconData icon, required String label, required String value, String? subtitle}) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -701,6 +830,10 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
               Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               const SizedBox(height: 2),
               Text(value, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ],
             ],
           ),
         ],
@@ -728,9 +861,16 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     );
   }
 
-  Widget _buildCardField(String label, String value, Color color) {
+  Widget _buildCardField(
+    String label,
+    String value,
+    Color color, {
+    TextOverflow? overflow,
+    int? maxLines,
+    CrossAxisAlignment align = CrossAxisAlignment.start,
+  }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: align,
       children: [
         Text(
           label,
@@ -740,8 +880,53 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
         Text(
           value,
           style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600),
+          overflow: overflow,
+          maxLines: maxLines,
         ),
       ],
+    );
+  }
+
+  Widget? _buildUtilizationForecast(CreditCard card, _CardSpendStats stats, NumberFormat fmt) {
+    final limit = card.usageLimit;
+    if (limit == null || limit <= 0) return null;
+
+    const targetUtilization = 0.3;
+    final desiredMax = limit * targetUtilization;
+    final payNeeded = stats.totalBalance - desiredMax;
+    final theme = Theme.of(context);
+    final offsets = card.reminderOffsets.where((d) => d > 0).toList();
+    final leadDays = offsets.isNotEmpty ? offsets.reduce((a, b) => a > b ? a : b) : 5;
+    final earlyDate = stats.window.due.subtract(Duration(days: leadDays));
+
+    String message;
+    if (payNeeded <= 0) {
+      message = 'On track to stay under ${(targetUtilization * 100).toStringAsFixed(0)}% utilization.';
+    } else {
+      message =
+          'Pay ${fmt.format(payNeeded)} by ${DateFormat.MMMd().format(earlyDate)} to stay under ${(targetUtilization * 100).toStringAsFixed(0)}% utilization.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.tips_and_updates, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -773,54 +958,55 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     return buffer.toString();
   }
 
-  _CardSpendStats _cardStats(CreditCard card, String displayCurrency) {
-    final window = _statementWindow(card);
-    final windowExpenses = _expenses.where((e) {
-      final sameCard = e.paymentSourceType.toLowerCase() == 'card' && e.paymentSourceId == card.id;
-      if (!sameCard) return false;
-      return !e.date.isBefore(window.start) && !e.date.isAfter(window.end);
-    }).toList();
+  _CardSpendStats _cardStats(CreditCard card, String displayCurrency, String baseCurrency) {
+    final now = DateTime.now();
+    final primary = computeCardBalance(expenses: _expenses, card: card, currency: displayCurrency, now: now);
+    final base = displayCurrency == baseCurrency
+        ? primary
+        : computeCardBalance(expenses: _expenses, card: card, currency: baseCurrency, now: now);
 
-    double charges = 0;
-    double payments = 0;
-    for (final e in windowExpenses) {
-      final amount = _amountForDisplay(e, displayCurrency);
-      if (amount >= 0) {
-        charges += amount;
-      } else {
-        payments += amount.abs();
-      }
-    }
-    final net = (charges - payments);
-    final netSpend = net < 0 ? 0.0 : net;
     final limit = card.usageLimit;
-    final available = limit != null ? (limit - netSpend) : null;
-    final utilization = (limit != null && limit > 0) ? (netSpend / limit) : null;
+    final outstanding = primary.totalBalance;
+    final available = limit != null ? (limit - outstanding) : null;
+    final utilization = (limit != null && limit > 0) ? ((outstanding > 0 ? outstanding : 0) / limit) : null;
+
+    final availableBase = (limit != null && displayCurrency == baseCurrency) ? (limit - base.totalBalance) : null;
+
     return _CardSpendStats(
-      window: window,
-      charges: charges,
-      payments: payments,
-      netSpend: netSpend,
+      window: primary.window,
+      statementBalance: primary.statementBalance,
+      unbilledBalance: primary.unbilledBalance,
+      totalBalance: outstanding,
+      statementCharges: primary.statementCharges,
+      statementPayments: primary.statementPayments,
+      statementBalanceBase: base.statementBalance,
+      unbilledBalanceBase: base.unbilledBalance,
+      totalBalanceBase: base.totalBalance,
+      statementPaymentsBase: base.statementPayments,
       available: available,
+      availableBase: availableBase,
       utilization: utilization,
     );
   }
 
-  _StatementWindow _statementWindow(CreditCard card) {
-    final now = DateTime.now();
-    final billingDay = card.billingDay.clamp(1, 28);
-    final currentBilling = _safeDate(now.year, now.month, billingDay);
-    final cycleEnd = now.isBefore(currentBilling) ? _safeDate(now.year, now.month - 1, billingDay) : currentBilling;
-    final startMonth = cycleEnd.month - 1 <= 0 ? cycleEnd.month + 11 : cycleEnd.month - 1;
-    final startYear = cycleEnd.month - 1 <= 0 ? cycleEnd.year - 1 : cycleEnd.year;
-    final cycleStart = _safeDate(startYear, startMonth, billingDay + 1);
-    final dueDay = (billingDay + card.graceDays).clamp(1, _daysInMonth(cycleEnd.year, cycleEnd.month));
-    final due = _safeDate(cycleEnd.year, cycleEnd.month, dueDay);
-    return _StatementWindow(start: cycleStart, end: cycleEnd, due: due);
+  StatementWindow _statementWindow(CreditCard card) {
+    return buildStatementWindow(now: DateTime.now(), billingDay: card.billingDay, graceDays: card.graceDays);
   }
 
   double _amountForDisplay(Expense expense, String displayCurrency) {
     return expense.amountForCurrency(displayCurrency);
+  }
+
+  String? _alternateCurrency(String currency) {
+    if (!AppConfig.enableSecondaryCurrency) return null;
+    if (currency == AppConfig.baseCurrency) return AppConfig.secondaryCurrency;
+    if (currency == AppConfig.secondaryCurrency) return AppConfig.baseCurrency;
+    return null;
+  }
+
+  Future<double?> _rateFor(String from, String to) {
+    final key = '$from:$to';
+    return _rateCache.putIfAbsent(key, () => _forexService.latestRate(base: from, symbol: to));
   }
 
   static String _reminderLabel(CreditCard card) {
@@ -861,7 +1047,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     final noteCtrl = TextEditingController();
     final accountCtrl = TextEditingController();
     var selectedAccountId = accounts.isNotEmpty ? accounts.first.id : null;
-    var currency = displayCurrency;
+    var currency = accounts.isNotEmpty ? accounts.first.currency : displayCurrency;
     var date = DateTime.now();
     final formKey = GlobalKey<FormState>();
 
@@ -904,12 +1090,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: currency,
-                          items: const [
-                            'EUR',
-                            'INR',
-                            'USD',
-                            'GBP',
-                          ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                          items: AppConfig.supportedCurrencies.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                           onChanged: (v) => setLocal(() => currency = v ?? displayCurrency),
                           decoration: const InputDecoration(labelText: 'Currency'),
                         ),
@@ -922,7 +1103,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                               context: ctx,
                               initialDate: date,
                               firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                              lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                              lastDate: DateTime.now(),
                             );
                             if (picked != null) {
                               setLocal(() => date = picked);
@@ -951,8 +1132,14 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                   else
                     DropdownButtonFormField<String>(
                       value: selectedAccountId,
-                      items: accounts.map((a) => DropdownMenuItem<String>(value: a.id, child: Text(a.bankName))).toList(),
-                      onChanged: (v) => setLocal(() => selectedAccountId = v),
+                      items: accounts
+                          .map((a) => DropdownMenuItem<String>(value: a.id, child: Text('${a.bankName} • ${a.currency}')))
+                          .toList(),
+                      onChanged: (v) => setLocal(() {
+                        selectedAccountId = v;
+                        final acct = accounts.firstWhere((a) => a.id == v, orElse: () => accounts.first);
+                        currency = acct.currency;
+                      }),
                       decoration: const InputDecoration(labelText: 'Paid from account'),
                     ),
                   const SizedBox(height: 10),
@@ -1007,6 +1194,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       note: result.note?.isEmpty == true ? null : result.note,
       paymentSourceType: 'account',
       paymentSourceId: result.accountId,
+      transactionType: 'transfer',
     );
     final cardCredit = Expense(
       title: paymentTitle,
@@ -1017,10 +1205,12 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       note: accountName != null ? 'Paid from $accountName' : (result.note?.isEmpty == true ? null : result.note),
       paymentSourceType: 'card',
       paymentSourceId: card.id,
+      transactionType: 'transfer',
     );
 
-    await _expenseRepository.addExpense(accountExpense);
-    await _expenseRepository.addExpense(cardCredit);
+    final baseCurrency = context.read<SettingsCubit>().state.baseCurrency;
+    await _expenseService.addExpense(accountExpense, baseCurrency: baseCurrency);
+    await _expenseService.addExpense(cardCredit, baseCurrency: baseCurrency);
     await _loadExpenses();
 
     if (!mounted) return;
@@ -1132,9 +1322,9 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
               child: Transform.translate(
                 offset: const Offset(0, 1),
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 7, sigmaY: 6),
+                  imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 8),
                   child: ColorFiltered(
-                    colorFilter: ColorFilter.mode(Colors.white.withOpacity(1), BlendMode.srcIn),
+                    colorFilter: ColorFilter.mode(Colors.white.withOpacity(0.5), BlendMode.srcIn),
                     child: SvgPicture.asset(asset, fit: BoxFit.contain),
                   ),
                 ),
@@ -1148,29 +1338,35 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
   }
 }
 
-class _StatementWindow {
-  _StatementWindow({required this.start, required this.end, required this.due});
-
-  final DateTime start;
-  final DateTime end;
-  final DateTime due;
-}
-
 class _CardSpendStats {
   _CardSpendStats({
     required this.window,
-    required this.charges,
-    required this.payments,
-    required this.netSpend,
+    required this.statementBalance,
+    required this.unbilledBalance,
+    required this.totalBalance,
+    required this.statementCharges,
+    required this.statementPayments,
+    required this.statementBalanceBase,
+    required this.unbilledBalanceBase,
+    required this.totalBalanceBase,
+    required this.statementPaymentsBase,
     required this.available,
+    required this.availableBase,
     required this.utilization,
   });
 
-  final _StatementWindow window;
-  final double charges;
-  final double payments;
-  final double netSpend;
+  final StatementWindow window;
+  final double statementBalance;
+  final double unbilledBalance;
+  final double totalBalance;
+  final double statementCharges;
+  final double statementPayments;
+  final double statementBalanceBase;
+  final double unbilledBalanceBase;
+  final double totalBalanceBase;
+  final double statementPaymentsBase;
   final double? available;
+  final double? availableBase;
   final double? utilization;
 }
 
@@ -1182,24 +1378,4 @@ class _PaymentDraft {
   final DateTime date;
   final String? accountId;
   final String? note;
-}
-
-int _daysInMonth(int year, int month) {
-  final nextMonth = (month == 12) ? DateTime(year + 1, 1, 1) : DateTime(year, month + 1, 1);
-  return nextMonth.subtract(const Duration(days: 1)).day;
-}
-
-DateTime _safeDate(int year, int month, int day) {
-  var y = year;
-  var m = month;
-  while (m <= 0) {
-    m += 12;
-    y -= 1;
-  }
-  while (m > 12) {
-    m -= 12;
-    y += 1;
-  }
-  final clampedDay = day.clamp(1, _daysInMonth(y, m));
-  return DateTime(y, m, clampedDay);
 }

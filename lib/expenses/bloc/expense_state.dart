@@ -14,6 +14,7 @@ class ExpenseState extends Equatable {
   final Map<String, double> categoryTotals;
   final double reservedPlanned;
   final double usableBudget;
+  final String baseCurrency;
   final String displayCurrency;
   final double? eurToInr;
   final double? budgetToEur;
@@ -32,12 +33,13 @@ class ExpenseState extends Equatable {
     required this.categoryTotals,
     required this.reservedPlanned,
     required this.usableBudget,
+    required this.baseCurrency,
     required this.displayCurrency,
     required this.eurToInr,
     required this.budgetToEur,
   });
 
-  factory ExpenseState.initial() {
+  factory ExpenseState.initial({String baseCurrency = AppConfig.baseCurrency}) {
     final now = DateTime.now();
     return ExpenseState(
       loading: false,
@@ -53,7 +55,8 @@ class ExpenseState extends Equatable {
       categoryTotals: const {},
       reservedPlanned: 0,
       usableBudget: 0,
-      displayCurrency: 'EUR',
+      baseCurrency: baseCurrency,
+      displayCurrency: baseCurrency,
       eurToInr: null,
       budgetToEur: null,
     );
@@ -73,6 +76,7 @@ class ExpenseState extends Equatable {
     Map<String, double>? categoryTotals,
     double? reservedPlanned,
     double? usableBudget,
+    String? baseCurrency,
     String? displayCurrency,
     double? eurToInr,
     double? budgetToEur,
@@ -91,6 +95,7 @@ class ExpenseState extends Equatable {
       categoryTotals: categoryTotals ?? this.categoryTotals,
       reservedPlanned: reservedPlanned ?? this.reservedPlanned,
       usableBudget: usableBudget ?? this.usableBudget,
+      baseCurrency: baseCurrency ?? this.baseCurrency,
       displayCurrency: displayCurrency ?? this.displayCurrency,
       eurToInr: eurToInr ?? this.eurToInr,
       budgetToEur: budgetToEur ?? this.budgetToEur,
@@ -112,6 +117,7 @@ class ExpenseState extends Equatable {
     categoryTotals,
     reservedPlanned,
     usableBudget,
+    baseCurrency,
     displayCurrency,
     eurToInr,
     budgetToEur,

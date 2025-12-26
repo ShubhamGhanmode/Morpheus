@@ -4,7 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:morpheus/banks/bank_repository.dart';
 import 'package:morpheus/banks/bank_search_cubit.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/widgets/color_picker.dart';
 
 /// Dialog that lets users author a credit card and persists the selection
 /// via the parent page. Bank field is type-ahead (top 5 only) to keep the
@@ -34,7 +37,7 @@ class _AddCardDialogState extends State<AddCardDialog> {
   String? _bankIconUrl;
   String? _cardNetwork;
 
-  Color _cardColor = const Color(0xFF1E3A8A);
+  Color _cardColor = AppColorPicker.defaultColor;
   Color? _explicitTextColor;
   Color get _textColor =>
       _explicitTextColor ??
@@ -44,6 +47,8 @@ class _AddCardDialogState extends State<AddCardDialog> {
   int _billingDay = 1;
   int _graceDays = 15;
   double? _usageLimit;
+  late String _currency;
+  bool _autopayEnabled = false;
   bool _reminderEnabled = false;
   final Set<int> _reminderOffsets = {7, 2};
 
@@ -51,9 +56,13 @@ class _AddCardDialogState extends State<AddCardDialog> {
   void initState() {
     super.initState();
     _bankSearchCubit = BankSearchCubit(BankRepository())..preload();
+    final baseCurrency =
+        context.read<SettingsCubit>().state.baseCurrency;
     _billingDay = (widget.existing?.billingDay ?? 1).clamp(1, 28);
     _graceDays = (widget.existing?.graceDays ?? 15).clamp(0, 90);
     _usageLimit = widget.existing?.usageLimit;
+    _currency = widget.existing?.currency ?? baseCurrency;
+    _autopayEnabled = widget.existing?.autopayEnabled ?? false;
     _reminderEnabled = widget.existing?.reminderEnabled ?? false;
     _reminderOffsets
       ..clear()
@@ -162,6 +171,8 @@ class _AddCardDialogState extends State<AddCardDialog> {
       billingDay: _billingDay,
       graceDays: _graceDays,
       usageLimit: _usageLimit,
+      currency: _currency,
+      autopayEnabled: _autopayEnabled,
       reminderEnabled: _reminderEnabled,
       reminderOffsets: _reminderEnabled
           ? _reminderOffsets.where((d) => d > 0).toList()
@@ -177,19 +188,6 @@ class _AddCardDialogState extends State<AddCardDialog> {
     _bankCtrl.selection = TextSelection.collapsed(offset: name.length);
     _prefillIcon();
   }
-
-  // simple preset palette; we can extend or swap with a full picker later
-  static const _palette = <Color>[
-    Color(0xFF1E3A8A),
-    Color(0xFF0EA5E9),
-    Color(0xFF059669),
-    Color(0xFF7C3AED),
-    Color(0xFFDC2626),
-    Color(0xFFEA580C),
-    Color(0xFF0F172A),
-    Color(0xFF334155),
-    Color(0xFFF59E0B),
-  ];
 
   static const _networkAssets = {
     'visa': 'assets/visa.svg',
@@ -431,53 +429,12 @@ class _AddCardDialogState extends State<AddCardDialog> {
                 _buildBillingAndLimitFields(),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: [
-                      ..._palette.map((c) {
-                        final selected = c.value == _cardColor.value;
-                        return GestureDetector(
-                          onTap: () => setState(() {
-                            _cardColor = c;
-                            _explicitTextColor = null;
-                          }),
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: c,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: selected
-                                    ? Colors.black.withOpacity(0.35)
-                                    : Colors.white,
-                                width: selected ? 2 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: c.withOpacity(0.25),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: selected
-                                ? const Icon(
-                                    Icons.check,
-                                    size: 16,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
-                        );
-                      }),
-                      ActionChip(
-                        avatar: const Icon(Icons.palette_outlined, size: 18),
-                        label: const Text('Custom'),
-                        onPressed: _pickCustomColor,
-                      ),
-                    ],
+                  child: AppColorPicker(
+                    selected: _cardColor,
+                    onChanged: (color) => setState(() {
+                      _cardColor = color;
+                      _explicitTextColor = null;
+                    }),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -681,80 +638,6 @@ class _AddCardDialogState extends State<AddCardDialog> {
     );
   }
 
-  Future<void> _pickCustomColor() async {
-    double hue = HSVColor.fromColor(_cardColor).hue;
-    double saturation = HSVColor.fromColor(_cardColor).saturation;
-    double value = HSVColor.fromColor(_cardColor).value;
-
-    final result = await showDialog<Color>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Pick a color'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Slider(
-                label: 'Hue',
-                min: 0,
-                max: 360,
-                divisions: 36,
-                value: hue,
-                onChanged: (v) => setLocal(() => hue = v),
-              ),
-              Slider(
-                label: 'Saturation',
-                min: 0,
-                max: 1,
-                divisions: 10,
-                value: saturation,
-                onChanged: (v) => setLocal(() => saturation = v),
-              ),
-              Slider(
-                label: 'Brightness',
-                min: 0.3,
-                max: 1,
-                divisions: 10,
-                value: value.clamp(0.3, 1),
-                onChanged: (v) => setLocal(() => value = v),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                height: 40,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(
-                ctx,
-                HSVColor.fromAHSV(1, hue, saturation, value).toColor(),
-              ),
-              child: const Text('Use color'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        _cardColor = result;
-        _explicitTextColor = null;
-      });
-    }
-  }
-
   Widget _buildBillingAndLimitFields() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,6 +699,19 @@ class _AddCardDialogState extends State<AddCardDialog> {
           ],
         ),
         const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _currency,
+          decoration: const InputDecoration(
+            labelText: 'Card currency',
+            helperText: 'All spends/limits are tracked in this currency',
+          ),
+          items: AppConfig.supportedCurrencies
+              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+              .toList(),
+          onChanged: (v) => setState(() => _currency = v ?? _currency),
+          validator: (v) => (v == null || v.isEmpty) ? 'Select currency' : null,
+        ),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _usageLimitCtrl,
           decoration: const InputDecoration(
@@ -832,6 +728,13 @@ class _AddCardDialogState extends State<AddCardDialog> {
                   v.trim().isEmpty ? null : double.tryParse(v.trim());
             });
           },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Autopay enabled'),
+          subtitle: const Text('Used in bills calendar for cash-flow impact'),
+          value: _autopayEnabled,
+          onChanged: (v) => setState(() => _autopayEnabled = v),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

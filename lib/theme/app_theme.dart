@@ -6,35 +6,23 @@ import 'typography.dart';
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light(
-    BuildContext context, {
-    AppContrast contrast = AppContrast.normal,
-  }) {
+  static ThemeData light(BuildContext context, {AppContrast contrast = AppContrast.normal}) {
     return _buildTheme(context, _schemeFor(Brightness.light, contrast));
   }
 
-  static ThemeData dark(
-    BuildContext context, {
-    AppContrast contrast = AppContrast.normal,
-  }) {
+  static ThemeData dark(BuildContext context, {AppContrast contrast = AppContrast.normal}) {
     return _buildTheme(context, _schemeFor(Brightness.dark, contrast));
   }
 
   static ColorScheme _schemeFor(Brightness brightness, AppContrast contrast) {
     switch (contrast) {
       case AppContrast.medium:
-        return brightness == Brightness.dark
-            ? darkMediumContrastColorScheme
-            : lightMediumContrastColorScheme;
+        return brightness == Brightness.dark ? darkMediumContrastColorScheme : lightMediumContrastColorScheme;
       case AppContrast.high:
-        return brightness == Brightness.dark
-            ? darkHighContrastColorScheme
-            : lightHighContrastColorScheme;
+        return brightness == Brightness.dark ? darkHighContrastColorScheme : lightHighContrastColorScheme;
       case AppContrast.normal:
       default:
-        return brightness == Brightness.dark
-            ? darkColorScheme
-            : lightColorScheme;
+        return brightness == Brightness.dark ? darkColorScheme : lightColorScheme;
     }
   }
 
@@ -44,10 +32,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: colors.brightness,
       colorScheme: colors,
-      textTheme: textTheme.apply(
-        bodyColor: colors.onSurface,
-        displayColor: colors.onSurface,
-      ),
+      textTheme: textTheme.apply(bodyColor: colors.onSurface, displayColor: colors.onSurface),
       scaffoldBackgroundColor: colors.background,
       canvasColor: colors.surface,
     );
@@ -72,9 +57,9 @@ class AppTheme {
         indicatorColor: colors.primaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => themedText.labelMedium?.copyWith(
-            color: states.contains(WidgetState.selected)
-                ? colors.onPrimaryContainer
-                : colors.onSurfaceVariant,
+            color: states.contains(WidgetState.selected) ? colors.tertiary : colors.onSurfaceVariant,
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.bold : FontWeight.normal,
+            fontSize: states.contains(WidgetState.selected) ? 13 : 12,
           ),
         ),
       ),
@@ -86,18 +71,12 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colors.surfaceContainerLowest,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colors.primary, width: 1.4),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         labelStyle: TextStyle(color: colors.onSurfaceVariant),
       ),
       chipTheme: ChipThemeData(

@@ -1,5 +1,6 @@
 // lib/database/database_helper.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/services/encryption_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -21,7 +22,7 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'morpheus.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -44,6 +45,8 @@ class DatabaseHelper {
         billing_day INTEGER DEFAULT 1,
         grace_days INTEGER DEFAULT 15,
         usage_limit REAL,
+        currency TEXT DEFAULT '${AppConfig.baseCurrency}',
+        autopay_enabled INTEGER DEFAULT 0,
         reminder_enabled INTEGER DEFAULT 0,
         reminder_offsets TEXT,
         is_synced INTEGER DEFAULT 0,
@@ -117,6 +120,14 @@ class DatabaseHelper {
     if (oldVersion < 3) {
       await db.execute(
         'ALTER TABLE credit_cards ADD COLUMN card_network TEXT',
+      );
+    }
+    if (oldVersion < 4) {
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN currency TEXT DEFAULT \'${AppConfig.baseCurrency}\'',
+      );
+      await db.execute(
+        'ALTER TABLE credit_cards ADD COLUMN autopay_enabled INTEGER DEFAULT 0',
       );
     }
   }
