@@ -1,24 +1,144 @@
 // lib/services/encryption_service.dart
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:morpheus/services/error_reporter.dart';
 
 class EncryptionService {
-  static const String _staticKey = 'YOUR_32_CHAR_STATIC_KEY_HERE_123456'; // 32 chars
-  static const String _staticIv = 'morpheus-iv-0001'; // 16 chars
-  static final _encrypter = Encrypter(AES(Key.fromUtf8(_staticKey)));
-  static final _iv = IV.fromUtf8(_staticIv);
+  static const String _legacyFallbackKey = 'YOUR_32_CHARACTER_LONG_KEY_HERE'; // 32 chars
+  static const String _legacyFallbackIv = 'YOUR_16_CHARACTER_LONG_IV'; // 16 chars
+  static const String _keyStorageKey = 'morpheus.encryption.key';
+  static const String _ivStorageKey = 'morpheus.encryption.iv';
+  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+
+  static String _keyValue = _legacyFallbackKey;
+  static String _ivValue = _legacyFallbackIv;
+  static Encrypter? _encrypter;
+  static IV? _iv;
+  static bool _initialized = false;
+
+  static Future<void> initialize({FlutterSecureStorage? storage}) async {
+    if (_initialized) return;
+    final secureStorage = storage ?? _storage;
+    String? storedKey;
+    String? storedIv;
+    try {
+      storedKey = await secureStorage.read(key: _keyStorageKey);
+      storedIv = await secureStorage.read(key: _ivStorageKey);
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Read encryption keys failed');
+    }
+
+    final hasStoredKey = storedKey != null;
+    final hasStoredIv = storedIv != null;
+    final missingPair = !hasStoredKey && !hasStoredIv;
+
+    var nextKey = missingPair ? _legacyFallbackKey : (storedKey ?? _legacyFallbackKey);
+    var nextIv = missingPair ? _legacyFallbackIv : (storedIv ?? _legacyFallbackIv);
+    var shouldWriteKey = missingPair || !hasStoredKey;
+    var shouldWriteIv = missingPair || !hasStoredIv;
+
+    _keyValue = nextKey;
+    _ivValue = nextIv;
+    if (!_configureCipher()) {
+      nextKey = _generateKeyValue();
+      nextIv = _generateIvValue();
+      _keyValue = nextKey;
+      _ivValue = nextIv;
+      _configureCipher();
+      shouldWriteKey = true;
+      shouldWriteIv = true;
+    }
+
+    try {
+      if (shouldWriteKey) {
+        await secureStorage.write(key: _keyStorageKey, value: _keyValue);
+      }
+      if (shouldWriteIv) {
+        await secureStorage.write(key: _ivStorageKey, value: _ivValue);
+      }
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Persist encryption keys failed');
+    }
+    _initialized = true;
+  }
+
+  static void _ensureReady() {
+    if (_encrypter != null && _iv != null) return;
+    if (!_initialized) {
+      debugPrint('EncryptionService used before initialize; using fallback key/iv.');
+    }
+    _configureCipher();
+  }
 
   static String encryptData(String data) {
-    return _encrypter.encrypt(data, iv: _iv).base64;
+    _ensureReady();
+    return _encrypter!.encrypt(data, iv: _iv!).base64;
   }
 
   static String decryptData(String encryptedData) {
-    return _encrypter.decrypt64(encryptedData, iv: _iv);
+    _ensureReady();
+    return _encrypter!.decrypt64(encryptedData, iv: _iv!);
   }
 
   static String encryptPin(String pin) {
-    return sha256.convert(utf8.encode(pin + _staticKey)).toString();
+    _ensureReady();
+    return sha256.convert(utf8.encode(pin + _keyValue)).toString();
+  }
+
+  static String _generateKeyValue() {
+    return Key.fromSecureRandom(32).base64;
+  }
+
+  static String _generateIvValue() {
+    return IV.fromSecureRandom(16).base64;
+  }
+
+  static bool _configureCipher() {
+    try {
+      _encrypter = Encrypter(AES(_keyFromStorageValue(_keyValue)));
+      _iv = _ivFromStorageValue(_ivValue);
+      return true;
+    } catch (e, stack) {
+      unawaited(ErrorReporter.recordError(e, stack, reason: 'Invalid encryption key/iv; reinitializing'));
+      _encrypter = Encrypter(AES(Key.fromUtf8(_legacyFallbackKey)));
+      _iv = IV.fromUtf8(_legacyFallbackIv);
+      return false;
+    }
+  }
+
+  static Key _keyFromStorageValue(String value) {
+    final bytes = _tryBase64Decode(value);
+    if (bytes != null && bytes.length == 32) {
+      return Key(bytes);
+    }
+    if (value.length == 32) {
+      return Key.fromUtf8(value);
+    }
+    throw ArgumentError('Invalid key length');
+  }
+
+  static IV _ivFromStorageValue(String value) {
+    final bytes = _tryBase64Decode(value);
+    if (bytes != null && bytes.length == 16) {
+      return IV(bytes);
+    }
+    if (value.length == 16) {
+      return IV.fromUtf8(value);
+    }
+    throw ArgumentError('Invalid iv length');
+  }
+
+  static Uint8List? _tryBase64Decode(String value) {
+    try {
+      return base64.decode(value);
+    } catch (_) {
+      return null;
+    }
   }
 }
