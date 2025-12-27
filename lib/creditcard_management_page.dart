@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,159 +12,20 @@ import 'package:morpheus/bills_calendar_page.dart';
 import 'package:morpheus/cards/card_ledger_page.dart';
 import 'package:morpheus/cards/card_cubit.dart';
 import 'package:morpheus/cards/card_repository.dart';
+import 'package:morpheus/cards/models/card_payment_draft.dart';
+import 'package:morpheus/cards/models/card_spend_stats.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/repositories/expense_repository.dart';
 import 'package:morpheus/expenses/services/expense_service.dart';
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/services/forex_service.dart';
 import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/utils/card_balances.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 import 'package:morpheus/utils/statement_dates.dart';
-
-class CreditCard {
-  final String id;
-  final String bankName;
-  final String? bankIconUrl;
-  final String? cardNetwork;
-  final String cardNumber;
-  final String holderName;
-  final String expiryDate;
-  final String cvv;
-  final Color cardColor;
-  final Color textColor;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
-  final int billingDay;
-  final int graceDays;
-  final double? usageLimit;
-  final String currency;
-  final bool autopayEnabled;
-  final bool reminderEnabled;
-  final List<int> reminderOffsets;
-
-  CreditCard({
-    required this.id,
-    required this.bankName,
-    this.bankIconUrl,
-    this.cardNetwork,
-    required this.cardNumber,
-    required this.holderName,
-    required this.expiryDate,
-    required this.cvv,
-    required this.cardColor,
-    required this.textColor,
-    this.createdAt,
-    this.updatedAt,
-    this.billingDay = 1,
-    this.graceDays = 15,
-    this.usageLimit,
-    this.currency = AppConfig.baseCurrency,
-    this.autopayEnabled = false,
-    this.reminderEnabled = false,
-    this.reminderOffsets = const [],
-  });
-
-  CreditCard copyWith({
-    String? id,
-    String? bankName,
-    String? bankIconUrl,
-    String? cardNetwork,
-    String? cardNumber,
-    String? holderName,
-    String? expiryDate,
-    String? cvv,
-    Color? cardColor,
-    Color? textColor,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    int? billingDay,
-    int? graceDays,
-    double? usageLimit,
-    String? currency,
-    bool? autopayEnabled,
-    bool? reminderEnabled,
-    List<int>? reminderOffsets,
-  }) {
-    return CreditCard(
-      id: id ?? this.id,
-      bankName: bankName ?? this.bankName,
-      bankIconUrl: bankIconUrl ?? this.bankIconUrl,
-      cardNetwork: cardNetwork ?? this.cardNetwork,
-      cardNumber: cardNumber ?? this.cardNumber,
-      holderName: holderName ?? this.holderName,
-      expiryDate: expiryDate ?? this.expiryDate,
-      cvv: cvv ?? this.cvv,
-      cardColor: cardColor ?? this.cardColor,
-      textColor: textColor ?? this.textColor,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      billingDay: billingDay ?? this.billingDay,
-      graceDays: graceDays ?? this.graceDays,
-      usageLimit: usageLimit ?? this.usageLimit,
-      currency: currency ?? this.currency,
-      autopayEnabled: autopayEnabled ?? this.autopayEnabled,
-      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
-      reminderOffsets: reminderOffsets ?? this.reminderOffsets,
-    );
-  }
-
-  Map<String, dynamic> toStorageMap() {
-    final now = DateTime.now();
-    return {
-      'id': id,
-      'bankName': bankName,
-      'bankIconUrl': bankIconUrl,
-      'cardNetwork': cardNetwork,
-      'cardNumber': cardNumber,
-      'holderName': holderName,
-      'expiryDate': expiryDate,
-      'cvv': cvv,
-      'cardColor': cardColor.value,
-      'textColor': textColor.value,
-      'createdAt': (createdAt ?? now).millisecondsSinceEpoch,
-      'updatedAt': (updatedAt ?? now).millisecondsSinceEpoch,
-      'billingDay': billingDay,
-      'graceDays': graceDays,
-      'usageLimit': usageLimit,
-      'currency': currency,
-      'autopayEnabled': autopayEnabled,
-      'reminderEnabled': reminderEnabled,
-      'reminderOffsets': reminderOffsets,
-    };
-  }
-
-  factory CreditCard.fromStorage(Map<String, dynamic> data) {
-    DateTime? toDate(dynamic v) {
-      if (v == null) return null;
-      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
-      if (v is Timestamp) return v.toDate();
-      return DateTime.tryParse(v.toString());
-    }
-
-    return CreditCard(
-      id: (data['id'] ?? '').toString(),
-      bankName: (data['bankName'] ?? data['bank_name'] ?? 'Unknown') as String,
-      bankIconUrl: data['bankIconUrl'] as String?,
-      cardNetwork: (data['cardNetwork'] ?? data['card_network']) as String?,
-      cardNumber: (data['cardNumber'] ?? data['card_number'] ?? '**** **** **** 0000') as String,
-      holderName: (data['holderName'] ?? data['card_holder_name'] ?? '').toString(),
-      expiryDate: (data['expiryDate'] ?? data['expiry_date'] ?? '').toString(),
-      cvv: (data['cvv'] ?? '***').toString(),
-      cardColor: Color((data['cardColor'] ?? 0xFF334155) as int),
-      textColor: Color((data['textColor'] ?? 0xFFFFFFFF) as int),
-      createdAt: toDate(data['createdAt'] ?? data['created_at']),
-      updatedAt: toDate(data['updatedAt'] ?? data['updated_at']),
-      billingDay: (data['billingDay'] ?? data['billing_day'] ?? 1) as int,
-      graceDays: (data['graceDays'] ?? data['grace_days'] ?? 15) as int,
-      usageLimit: (data['usageLimit'] as num?)?.toDouble(),
-      currency: (data['currency'] ?? data['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
-      autopayEnabled: (data['autopayEnabled'] ?? data['autopay_enabled'] ?? false) as bool,
-      reminderEnabled: (data['reminderEnabled'] ?? data['reminder_enabled'] ?? false) as bool,
-      reminderOffsets: (data['reminderOffsets'] as List?)?.map((e) => (e as num).toInt()).toList() ?? const [],
-    );
-  }
-}
 
 class CreditCardManagementPage extends StatefulWidget {
   const CreditCardManagementPage({super.key, this.tabIndexListenable, this.tabIndex});
@@ -197,41 +57,15 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
   VoidCallback? _tabListener;
 
   Future<void> _onAddCard() async {
-    // Expecting your dialog to return either a CreditCard or a Map<String, dynamic>
-    final result = await showDialog(context: context, barrierDismissible: true, builder: (_) => AddCardDialog());
-
-    if (result == null) return;
-
-    CreditCard? newCard;
-
-    if (result is CreditCard) {
-      newCard = result;
-    } else if (result is Map) {
-      newCard = CreditCard(
-        id: (result['id'] ?? DateTime.now().millisecondsSinceEpoch.toString()).toString(),
-        bankName: result['bankName'] ?? 'New Bank',
-        bankIconUrl: result['bankIconUrl'] as String?,
-        cardNetwork: result['cardNetwork'] as String?,
-        cardNumber: result['cardNumber'] ?? '**** **** **** 0000',
-        holderName: result['holderName'] ?? '',
-        expiryDate: result['expiryDate'] ?? '',
-        cvv: result['cvv'] ?? '***',
-        cardColor: (result['cardColor'] is Color) ? result['cardColor'] : const Color(0xFF334155),
-        textColor: (result['textColor'] is Color) ? result['textColor'] : Colors.white,
-        createdAt: DateTime.now(),
-        billingDay: (result['billingDay'] as int?)?.clamp(1, 28) ?? 1,
-        graceDays: (result['graceDays'] as int?)?.clamp(0, 90) ?? 15,
-        usageLimit: (result['usageLimit'] as num?)?.toDouble(),
-        currency: (result['currency'] ?? result['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
-        autopayEnabled: result['autopayEnabled'] as bool? ?? false,
-        reminderEnabled: result['reminderEnabled'] as bool? ?? false,
-        reminderOffsets: (result['reminderOffsets'] as List?)?.map((e) => (e as num).toInt()).toList() ?? const [],
-      );
-    }
+    final newCard = await showDialog<CreditCard>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AddCardDialog(),
+    );
 
     if (newCard == null) return;
 
-    await _cardCubit.addCard(newCard!);
+    await _cardCubit.addCard(newCard);
     setState(() => selectedCard = newCard);
 
     // Play the select animation for the newly added card
@@ -364,9 +198,17 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
         _expenses = items;
         _expensesLoading = false;
       });
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Load card expenses failed',
+      );
       if (!mounted) return;
       setState(() => _expensesLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage(e, action: 'Load expenses'))),
+      );
     }
   }
 
@@ -887,7 +729,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     );
   }
 
-  Widget? _buildUtilizationForecast(CreditCard card, _CardSpendStats stats, NumberFormat fmt) {
+  Widget? _buildUtilizationForecast(CreditCard card, CardSpendStats stats, NumberFormat fmt) {
     final limit = card.usageLimit;
     if (limit == null || limit <= 0) return null;
 
@@ -958,7 +800,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     return buffer.toString();
   }
 
-  _CardSpendStats _cardStats(CreditCard card, String displayCurrency, String baseCurrency) {
+  CardSpendStats _cardStats(CreditCard card, String displayCurrency, String baseCurrency) {
     final now = DateTime.now();
     final primary = computeCardBalance(expenses: _expenses, card: card, currency: displayCurrency, now: now);
     final base = displayCurrency == baseCurrency
@@ -972,7 +814,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
 
     final availableBase = (limit != null && displayCurrency == baseCurrency) ? (limit - base.totalBalance) : null;
 
-    return _CardSpendStats(
+    return CardSpendStats(
       window: primary.window,
       statementBalance: primary.statementBalance,
       unbilledBalance: primary.unbilledBalance,
@@ -1034,7 +876,8 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test push sent')));
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Send test push failed');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test push failed')));
     }
@@ -1051,7 +894,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
     var date = DateTime.now();
     final formKey = GlobalKey<FormState>();
 
-    final result = await showModalBottomSheet<_PaymentDraft>(
+    final result = await showModalBottomSheet<CardPaymentDraft>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
@@ -1160,7 +1003,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                           final accountId = accounts.isEmpty ? accountCtrl.text.trim() : selectedAccountId;
                           Navigator.pop(
                             ctx,
-                            _PaymentDraft(
+                            CardPaymentDraft(
                               amount: amount,
                               currency: currency,
                               date: date,
@@ -1185,7 +1028,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
 
     final accountName = _accountNameFor(result.accountId);
     final paymentTitle = 'Card payment - ${card.bankName}';
-    final accountExpense = Expense(
+    final accountExpense = Expense.create(
       title: paymentTitle,
       amount: result.amount,
       currency: result.currency,
@@ -1196,7 +1039,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
       paymentSourceId: result.accountId,
       transactionType: 'transfer',
     );
-    final cardCredit = Expense(
+    final cardCredit = Expense.create(
       title: paymentTitle,
       amount: -result.amount,
       currency: result.currency,
@@ -1338,44 +1181,3 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
   }
 }
 
-class _CardSpendStats {
-  _CardSpendStats({
-    required this.window,
-    required this.statementBalance,
-    required this.unbilledBalance,
-    required this.totalBalance,
-    required this.statementCharges,
-    required this.statementPayments,
-    required this.statementBalanceBase,
-    required this.unbilledBalanceBase,
-    required this.totalBalanceBase,
-    required this.statementPaymentsBase,
-    required this.available,
-    required this.availableBase,
-    required this.utilization,
-  });
-
-  final StatementWindow window;
-  final double statementBalance;
-  final double unbilledBalance;
-  final double totalBalance;
-  final double statementCharges;
-  final double statementPayments;
-  final double statementBalanceBase;
-  final double unbilledBalanceBase;
-  final double totalBalanceBase;
-  final double statementPaymentsBase;
-  final double? available;
-  final double? availableBase;
-  final double? utilization;
-}
-
-class _PaymentDraft {
-  const _PaymentDraft({required this.amount, required this.currency, required this.date, required this.accountId, this.note});
-
-  final double amount;
-  final String currency;
-  final DateTime date;
-  final String? accountId;
-  final String? note;
-}

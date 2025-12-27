@@ -1,26 +1,20 @@
-class ExpenseCategory {
-  const ExpenseCategory({
-    required this.id,
-    required this.name,
-    required this.emoji,
-  });
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-  final String id;
-  final String name;
-  final String emoji;
+part 'expense_category.freezed.dart';
+part 'expense_category.g.dart';
+
+@freezed
+abstract class ExpenseCategory with _$ExpenseCategory {
+  const ExpenseCategory._();
+
+  factory ExpenseCategory({
+    required String id,
+    required String name,
+    @Default('') String emoji,
+  }) = _ExpenseCategory;
+
+  factory ExpenseCategory.fromJson(Map<String, dynamic> json) =>
+      _$ExpenseCategoryFromJson(json);
 
   String get label => emoji.isNotEmpty ? '$emoji $name' : name;
-
-  Map<String, dynamic> toMap() => {
-    'name': name,
-    'emoji': emoji,
-  };
-
-  factory ExpenseCategory.fromMap(String id, Map<String, dynamic> map) {
-    return ExpenseCategory(
-      id: id,
-      name: (map['name'] ?? '').toString(),
-      emoji: (map['emoji'] ?? '').toString(),
-    );
-  }
 }

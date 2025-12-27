@@ -1,8 +1,10 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/cards/card_repository.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/services/notification_service.dart';
+import 'package:morpheus/services/error_reporter.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 
 class CardState extends Equatable {
   final List<CreditCard> cards;
@@ -37,8 +39,14 @@ class CardCubit extends Cubit<CardState> {
       final cards = await _repository.fetchCards();
       emit(state.copyWith(cards: cards, loading: false));
       await _notifications.scheduleCardReminders(cards);
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Load cards failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Load cards'),
+        ),
+      );
     }
   }
 
@@ -49,8 +57,14 @@ class CardCubit extends Cubit<CardState> {
       final updated = [card, ...state.cards.where((c) => c.id != card.id)];
       emit(state.copyWith(cards: updated, loading: false));
       await _notifications.scheduleCardReminders(updated);
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Save card failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Save card'),
+        ),
+      );
     }
   }
 
@@ -61,8 +75,14 @@ class CardCubit extends Cubit<CardState> {
       final updated = state.cards.where((c) => c.id != id).toList();
       emit(state.copyWith(cards: updated, loading: false));
       await _notifications.scheduleCardReminders(updated);
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Delete card failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Delete card'),
+        ),
+      );
     }
   }
 }

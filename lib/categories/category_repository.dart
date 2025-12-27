@@ -21,7 +21,7 @@ class CategoryRepository {
     if (uid == null) return [];
     final snap = await _categoriesRef(uid).orderBy('name').get();
     return snap.docs
-        .map((d) => ExpenseCategory.fromMap(d.id, d.data()))
+        .map((d) => ExpenseCategory.fromJson({'id': d.id, ...d.data()}))
         .where((c) => c.name.isNotEmpty)
         .toList();
   }

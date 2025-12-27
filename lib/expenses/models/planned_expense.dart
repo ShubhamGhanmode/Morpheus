@@ -1,39 +1,39 @@
-import 'package:equatable/equatable.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:morpheus/models/json_converters.dart';
 import 'package:uuid/uuid.dart';
 
-class PlannedExpense extends Equatable {
-  PlannedExpense({
+part 'planned_expense.freezed.dart';
+part 'planned_expense.g.dart';
+
+@freezed
+abstract class PlannedExpense with _$PlannedExpense {
+  const PlannedExpense._();
+
+  factory PlannedExpense({
+    required String id,
+    required String title,
+    required double amount,
+    @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)
+    required DateTime dueDate,
+    String? category,
+  }) = _PlannedExpense;
+
+  factory PlannedExpense.create({
     String? id,
-    required this.title,
-    required this.amount,
-    required this.dueDate,
-    this.category,
-  }) : id = id ?? const Uuid().v4();
-
-  final String id;
-  final String title;
-  final double amount;
-  final DateTime dueDate;
-  final String? category;
-
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'title': title,
-    'amount': amount,
-    'dueDate': dueDate.millisecondsSinceEpoch,
-    'category': category,
-  };
-
-  factory PlannedExpense.fromMap(Map<String, dynamic> map) {
+    required String title,
+    required double amount,
+    required DateTime dueDate,
+    String? category,
+  }) {
     return PlannedExpense(
-      id: (map['id'] ?? '').toString(),
-      title: map['title'] as String,
-      amount: (map['amount'] as num).toDouble(),
-      dueDate: DateTime.fromMillisecondsSinceEpoch(map['dueDate'] as int),
-      category: map['category'] as String?,
+      id: id ?? const Uuid().v4(),
+      title: title,
+      amount: amount,
+      dueDate: dueDate,
+      category: category,
     );
   }
 
-  @override
-  List<Object?> get props => [id, title, amount, dueDate, category];
+  factory PlannedExpense.fromJson(Map<String, dynamic> json) =>
+      _$PlannedExpenseFromJson(json);
 }

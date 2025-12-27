@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:morpheus/services/auth_service.dart';
+import 'package:morpheus/services/error_reporter.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -63,6 +64,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       // just return and let AuthGate rebuild.
       return;
     } on GoogleSignInException catch (e, st) {
+      await ErrorReporter.recordError(
+        e,
+        st,
+        reason: 'Google sign-in failed',
+      );
       dev.log(
         'GoogleSignInException: ${e.code}',
         name: 'auth',
@@ -74,6 +80,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         SnackBar(content: Text('Google sign-in failed: ${e.code}')),
       );
     } on FirebaseAuthException catch (e, st) {
+      await ErrorReporter.recordError(
+        e,
+        st,
+        reason: 'Firebase auth failed',
+      );
       dev.log(
         'FirebaseAuthException: ${e.code}',
         name: 'auth',
@@ -85,6 +96,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         context,
       ).showSnackBar(SnackBar(content: Text('Auth error: ${e.code}')));
     } catch (e, st) {
+      await ErrorReporter.recordError(
+        e,
+        st,
+        reason: 'Sign-in failed',
+      );
       dev.log('Unknown auth error', name: 'auth', error: e, stackTrace: st);
       setState(() => _error = e.toString());
       ScaffoldMessenger.of(

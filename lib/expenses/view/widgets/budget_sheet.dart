@@ -155,7 +155,7 @@ class _BudgetSheetState extends State<BudgetSheet> {
       return;
     }
     final amount = double.parse(_amountCtrl.text.trim());
-    final budget = Budget(
+    final budget = Budget.create(
       id: widget.existing?.id,
       amount: amount,
       currency: _currency,

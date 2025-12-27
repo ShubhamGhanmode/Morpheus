@@ -74,3 +74,48 @@ class SetBaseCurrency extends ExpenseEvent {
   @override
   List<Object?> get props => [currency];
 }
+
+class SaveRecurringTransaction extends ExpenseEvent {
+  const SaveRecurringTransaction(this.transaction);
+
+  final RecurringTransaction transaction;
+
+  @override
+  List<Object?> get props => [transaction];
+}
+
+class DeleteRecurringTransaction extends ExpenseEvent {
+  const DeleteRecurringTransaction(this.transactionId);
+
+  final String transactionId;
+
+  @override
+  List<Object?> get props => [transactionId];
+}
+
+class RecordRecurringTransaction extends ExpenseEvent {
+  const RecordRecurringTransaction(this.transaction);
+
+  final RecurringTransaction transaction;
+
+  @override
+  List<Object?> get props => [transaction];
+}
+
+class SaveSubscription extends ExpenseEvent {
+  const SaveSubscription(this.subscription);
+
+  final Subscription subscription;
+
+  @override
+  List<Object?> get props => [subscription];
+}
+
+class DeleteSubscription extends ExpenseEvent {
+  const DeleteSubscription(this.subscriptionId);
+
+  final String subscriptionId;
+
+  @override
+  List<Object?> get props => [subscriptionId];
+}

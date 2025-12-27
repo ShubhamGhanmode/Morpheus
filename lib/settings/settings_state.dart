@@ -9,6 +9,7 @@ class SettingsState {
   final bool appLockEnabled;
   final bool testModeEnabled;
   final String baseCurrency;
+  final String? error;
 
   const SettingsState({
     this.themeMode = ThemeMode.system,
@@ -17,6 +18,7 @@ class SettingsState {
     this.appLockEnabled = false,
     this.testModeEnabled = false,
     this.baseCurrency = AppConfig.baseCurrency,
+    this.error,
   });
 
   SettingsState copyWith({
@@ -26,6 +28,7 @@ class SettingsState {
     bool? appLockEnabled,
     bool? testModeEnabled,
     String? baseCurrency,
+    String? error,
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
@@ -34,6 +37,7 @@ class SettingsState {
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       testModeEnabled: testModeEnabled ?? this.testModeEnabled,
       baseCurrency: baseCurrency ?? this.baseCurrency,
+      error: error,
     );
   }
 }

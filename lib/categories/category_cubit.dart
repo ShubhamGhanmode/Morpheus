@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/categories/category_repository.dart';
 import 'package:morpheus/categories/expense_category.dart';
+import 'package:morpheus/services/error_reporter.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 
 class CategoryState extends Equatable {
   const CategoryState({
@@ -40,8 +42,14 @@ class CategoryCubit extends Cubit<CategoryState> {
     try {
       final items = await _repository.fetchCategories();
       emit(state.copyWith(loading: false, items: items));
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Load categories failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Load categories'),
+        ),
+      );
     }
   }
 
@@ -51,8 +59,18 @@ class CategoryCubit extends Cubit<CategoryState> {
       await _repository.addDefaultCategories();
       final items = await _repository.fetchCategories();
       emit(state.copyWith(loading: false, items: items));
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Seed default categories failed',
+      );
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Add default categories'),
+        ),
+      );
     }
   }
 
@@ -62,8 +80,14 @@ class CategoryCubit extends Cubit<CategoryState> {
       await _repository.addCategory(name: name, emoji: emoji);
       final items = await _repository.fetchCategories();
       emit(state.copyWith(loading: false, items: items));
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Add category failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Add category'),
+        ),
+      );
     }
   }
 }

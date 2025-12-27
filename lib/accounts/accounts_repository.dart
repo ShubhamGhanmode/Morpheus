@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/services/encryption_service.dart';
 
 class AccountsRepository {
@@ -24,7 +27,7 @@ class AccountsRepository {
     if (col == null) return [];
     final snap = await col.orderBy('lastUpdated', descending: true).get();
     return snap.docs
-        .map((d) => AccountCredential.fromMap(d.id, _decrypt(d.data())))
+        .map((d) => AccountCredential.fromJson({'id': d.id, ..._decrypt(d.data())}))
         .toList();
   }
 
@@ -41,7 +44,7 @@ class AccountsRepository {
   }
 
   Map<String, dynamic> _encrypt(AccountCredential acct) {
-    final base = acct.toMap();
+    final base = acct.toJson();
     return {
       ...base,
       'bankName': EncryptionService.encryptData(acct.bankName),
@@ -59,7 +62,15 @@ class AccountsRepository {
       if (raw == null) return fallback;
       try {
         return EncryptionService.decryptData(raw as String);
-      } catch (_) {
+      } catch (e, stack) {
+        unawaited(
+          ErrorReporter.recordError(
+            e,
+            stack,
+            reason: 'Account field decrypt failed',
+            context: {'field': key},
+          ),
+        );
         return fallback;
       }
     }

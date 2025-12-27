@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:morpheus/services/error_reporter.dart';
 
 class AppLockService {
   AppLockService({LocalAuthentication? auth})
@@ -13,7 +14,12 @@ class AppLockService {
       final canCheck = await _auth.canCheckBiometrics;
       final supported = await _auth.isDeviceSupported();
       return canCheck || supported;
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Check device auth support failed',
+      );
       return false;
     }
   }
@@ -27,7 +33,12 @@ class AppLockService {
         sensitiveTransaction: true,
         persistAcrossBackgrounding: true,
       );
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Biometric auth failed',
+      );
       return false;
     }
   }

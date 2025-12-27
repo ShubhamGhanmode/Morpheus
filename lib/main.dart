@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/auth/auth_bloc.dart';
@@ -10,6 +9,8 @@ import 'package:morpheus/categories/category_cubit.dart';
 import 'package:morpheus/categories/category_repository.dart';
 import 'package:morpheus/navigation_bar.dart';
 import 'package:morpheus/services/auth_service.dart';
+import 'package:morpheus/services/encryption_service.dart';
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/splash_page.dart';
 import 'package:morpheus/lock/app_lock_gate.dart';
@@ -17,6 +18,7 @@ import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/settings/settings_repository.dart';
 import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/app_theme.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'firebase_options.dart'; // created by flutterfire configure
 import 'signup_page.dart';
@@ -31,13 +33,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
+  await EncryptionService.initialize();
   await AuthService.initializeGoogle(
     serverClientId:
         "842775331840-gsso7qkcb8mmi0sj97b63upejevbku48.apps.googleusercontent.com",
-    clientId: (Platform.isIOS || Platform.isMacOS)
-        ? "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com"
-        : null,
+    clientId:
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.macOS)
+            ? "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com"
+            : null,
   );
 
   await NotificationService.instance.initialize();
@@ -45,13 +52,28 @@ Future<void> main() async {
   final authRepository = AuthRepository();
   final settingsRepository = SettingsRepository();
   final initialSettings = await settingsRepository.load();
-  runApp(
-    MorpheusApp(
-      authRepository: authRepository,
-      settingsRepository: settingsRepository,
-      initialSettings: initialSettings,
-    ),
+  final app = MorpheusApp(
+    authRepository: authRepository,
+    settingsRepository: settingsRepository,
+    initialSettings: initialSettings,
   );
+
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+  if (sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.tracesSampleRate = 0.1;
+      },
+      appRunner: () async {
+        await ErrorReporter.initialize();
+        runApp(app);
+      },
+    );
+  } else {
+    await ErrorReporter.initialize();
+    runApp(app);
+  }
 }
 
 class MorpheusApp extends StatelessWidget {

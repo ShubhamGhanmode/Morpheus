@@ -12,8 +12,10 @@ import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/repositories/expense_repository.dart';
 import 'package:morpheus/expenses/services/expense_service.dart';
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/services/forex_service.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AccountsPage extends StatefulWidget {
@@ -78,9 +80,11 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
         _expenses = items;
         _expensesLoading = false;
       });
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Load account expenses failed');
       if (!mounted) return;
       setState(() => _expensesLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage(e, action: 'Load expenses'))));
     }
   }
 
@@ -339,26 +343,37 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 10,
+                  runSpacing: 12,
                   children: [
-                    FilledButton.tonalIcon(
-                      onPressed: () => _showCredentialsDialog(acct),
-                      icon: const Icon(Icons.lock_outline_rounded),
-                      label: const Text('Login details'),
-                      style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                    SizedBox(
+                      height: 40,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => _showCredentialsDialog(acct),
+                        icon: const Icon(Icons.lock_outline_rounded),
+                        label: const Text('Login info'),
+                        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                      ),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: () => _openLedger(acct),
-                      icon: const Icon(Icons.receipt_long),
-                      label: const Text('Transactions'),
-                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                    SizedBox(
+                      height: 40,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openLedger(acct),
+                        icon: const Icon(Icons.receipt_long),
+                        label: const Text('Transactions'),
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                      ),
                     ),
-                    FilledButton.icon(
-                      onPressed: () => _recordCredit(acct),
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Record credit'),
-                      style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                    SizedBox(
+                      height: 40,
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _recordCredit(acct),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Record credit'),
+                        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                      ),
                     ),
                   ],
                 ),
@@ -571,7 +586,8 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
       if (!launched && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
       }
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Open bank website failed');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
     }
@@ -673,7 +689,7 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
     final baseCurrency = context.read<SettingsCubit>().state.baseCurrency;
 
     try {
-      final expense = Expense(
+      final expense = Expense.create(
         title: 'Account credit',
         amount: -amount,
         currency: acct.currency,
@@ -688,7 +704,8 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
       await _loadExpenses();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Credit recorded')));
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Record account credit failed');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to record credit')));
     }

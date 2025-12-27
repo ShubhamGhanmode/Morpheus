@@ -11,16 +11,6 @@ class BankRepository {
   Future<List<String>> searchBanks(String query, {int limit = 5}) =>
       BanksDb.fetchBankNames(startsWith: query.trim(), limit: limit);
 
-  Future<String?> findIconByName(String name) async {
-    final db = await BanksDb.instance();
-    final rows = await db.query(
-      'banks',
-      columns: ['icon'],
-      where: 'name = ?',
-      whereArgs: [name],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['icon'] as String?;
-  }
+  Future<String?> findIconByName(String name) =>
+      BanksDb.fetchBankIcon(name);
 }

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:morpheus/config/app_config.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/bills/models/bill_item.dart';
+import 'package:morpheus/cards/models/card_spend_stats.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/services/forex_service.dart';
 import 'package:morpheus/utils/card_balances.dart';
-import 'package:morpheus/utils/statement_dates.dart';
 
 class BillsCalendarPage extends StatefulWidget {
   const BillsCalendarPage({super.key, required this.cards, required this.expenses, required this.baseCurrency});
@@ -39,13 +40,12 @@ class _BillsCalendarPageState extends State<BillsCalendarPage> {
     final now = DateTime.now();
     final bills = widget.cards.map((card) {
       final cardCurrency = card.currency.isNotEmpty ? card.currency : widget.baseCurrency;
-      final stats = _cardStats(card, cardCurrency);
-      final baseStats = _cardStats(card, widget.baseCurrency);
+      final stats = _cardStats(card, cardCurrency, widget.baseCurrency);
       final due = stats.window.due;
       final dueAmount = stats.statementBalance;
-      final baseAmount = baseStats.statementBalance;
+      final baseAmount = stats.statementBalanceBase;
       final hasDue = dueAmount > 0;
-      return _BillItem(
+      return BillItem(
         card: card,
         due: due,
         amount: dueAmount,
@@ -84,7 +84,7 @@ class _BillsCalendarPageState extends State<BillsCalendarPage> {
     );
   }
 
-  List<Widget> _buildSections(BuildContext context, List<_BillItem> bills) {
+  List<Widget> _buildSections(BuildContext context, List<BillItem> bills) {
     final widgets = <Widget>[];
     String? currentKey;
     for (final bill in bills) {
@@ -110,13 +110,48 @@ class _BillsCalendarPageState extends State<BillsCalendarPage> {
     return widgets;
   }
 
-  _CardSpendStats _cardStats(CreditCard card, String currency) {
-    final balance = computeCardBalance(expenses: widget.expenses, card: card, currency: currency);
-    return _CardSpendStats(
-      window: balance.window,
-      statementBalance: balance.statementBalance,
-      unbilledBalance: balance.unbilledBalance,
-      totalBalance: balance.totalBalance,
+  CardSpendStats _cardStats(
+    CreditCard card,
+    String displayCurrency,
+    String baseCurrency,
+  ) {
+    final primary = computeCardBalance(
+      expenses: widget.expenses,
+      card: card,
+      currency: displayCurrency,
+    );
+    final base = displayCurrency == baseCurrency
+        ? primary
+        : computeCardBalance(
+            expenses: widget.expenses,
+            card: card,
+            currency: baseCurrency,
+          );
+
+    final limit = card.usageLimit;
+    final outstanding = primary.totalBalance;
+    final available = limit != null ? (limit - outstanding) : null;
+    final utilization =
+        (limit != null && limit > 0) ? ((outstanding > 0 ? outstanding : 0) / limit) : null;
+    final availableBase =
+        (limit != null && displayCurrency == baseCurrency)
+            ? (limit - base.totalBalance)
+            : null;
+
+    return CardSpendStats(
+      window: primary.window,
+      statementBalance: primary.statementBalance,
+      unbilledBalance: primary.unbilledBalance,
+      totalBalance: outstanding,
+      statementCharges: primary.statementCharges,
+      statementPayments: primary.statementPayments,
+      statementBalanceBase: base.statementBalance,
+      unbilledBalanceBase: base.unbilledBalance,
+      totalBalanceBase: base.totalBalance,
+      statementPaymentsBase: base.statementPayments,
+      available: available,
+      availableBase: availableBase,
+      utilization: utilization,
     );
   }
 }
@@ -233,7 +268,7 @@ class _EmptyBillsState extends StatelessWidget {
 class _BillRow extends StatelessWidget {
   const _BillRow({required this.item, required this.altCurrency, required this.altRateFuture});
 
-  final _BillItem item;
+  final BillItem item;
   final String? altCurrency;
   final Future<double?>? altRateFuture;
 
@@ -333,36 +368,4 @@ class _BillRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _BillItem {
-  _BillItem({
-    required this.card,
-    required this.due,
-    required this.amount,
-    required this.amountInBase,
-    required this.currency,
-    required this.overdue,
-  });
-
-  final CreditCard card;
-  final DateTime due;
-  final double amount;
-  final double amountInBase;
-  final String currency;
-  final bool overdue;
-}
-
-class _CardSpendStats {
-  _CardSpendStats({
-    required this.window,
-    required this.statementBalance,
-    required this.unbilledBalance,
-    required this.totalBalance,
-  });
-
-  final StatementWindow window;
-  final double statementBalance;
-  final double unbilledBalance;
-  final double totalBalance;
 }

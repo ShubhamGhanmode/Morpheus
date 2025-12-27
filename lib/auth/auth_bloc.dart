@@ -4,6 +4,8 @@ import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:morpheus/auth/auth_repository.dart';
 import 'package:morpheus/auth/auth_user.dart';
+import 'package:morpheus/services/error_reporter.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 
 part 'auth_event.dart';
 part 'auth_state.dart';
@@ -30,8 +32,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(
         user != null ? AuthAuthenticated(user) : const AuthUnauthenticated(),
       );
-    } catch (e) {
-      emit(AuthFailure(e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Restore session failed',
+      );
+      emit(AuthFailure(errorMessage(e, action: 'Restore session')));
     }
   }
 
@@ -49,8 +56,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
-    await _repository.signOut();
-    emit(const AuthUnauthenticated());
+    try {
+      await _repository.signOut();
+      emit(const AuthUnauthenticated());
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Sign out failed',
+      );
+      emit(AuthFailure(errorMessage(e, action: 'Sign out')));
+    }
   }
 
   @override

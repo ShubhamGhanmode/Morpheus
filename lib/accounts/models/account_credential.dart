@@ -1,113 +1,85 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:equatable/equatable.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:flutter/material.dart';
 import 'package:morpheus/config/app_config.dart';
+import 'package:morpheus/models/json_converters.dart';
 import 'package:uuid/uuid.dart';
 
-class AccountCredential extends Equatable {
-  AccountCredential({
-    String? id,
-    required this.bankName,
-    this.bankIconUrl,
-    required this.username,
-    required this.password,
-    this.website,
-    required this.lastUpdated,
-    this.brandColor,
-    this.currency = AppConfig.baseCurrency,
-    this.balance = 0,
-  }) : id = id ?? const Uuid().v4();
+part 'account_credential.freezed.dart';
+part 'account_credential.g.dart';
 
-  final String id;
-  final String bankName;
-  final String? bankIconUrl;
-  final String username;
-  final String password;
-  final String? website;
-  final DateTime lastUpdated;
-  final Color? brandColor;
-  final String currency;
-  final double balance;
+@freezed
+abstract class AccountCredential with _$AccountCredential {
+  const AccountCredential._();
 
-  AccountCredential copyWith({
-    String? id,
-    String? bankName,
-    String? bankIconUrl,
-    String? username,
-    String? password,
-    String? website,
-    DateTime? lastUpdated,
+  factory AccountCredential({
+    required String id,
+    @JsonKey(readValue: _readBankName) required String bankName,
+    @JsonKey(readValue: _readBankIconUrl) String? bankIconUrl,
+    @JsonKey(readValue: _readUsername) required String username,
+    @JsonKey(readValue: _readPassword) required String password,
+    @JsonKey(readValue: _readWebsite) String? website,
+    @JsonKey(
+      readValue: _readLastUpdated,
+      fromJson: dateTimeFromJson,
+      toJson: dateTimeToJson,
+    )
+    required DateTime lastUpdated,
+    @JsonKey(fromJson: nullableColorFromJson, toJson: nullableColorToJson)
     Color? brandColor,
-    String? currency,
-    double? balance,
+    @JsonKey(readValue: _readCurrency)
+    @Default(AppConfig.baseCurrency)
+    String currency,
+    @Default(0) double balance,
+  }) = _AccountCredential;
+
+  factory AccountCredential.create({
+    String? id,
+    required String bankName,
+    String? bankIconUrl,
+    required String username,
+    required String password,
+    String? website,
+    required DateTime lastUpdated,
+    Color? brandColor,
+    String currency = AppConfig.baseCurrency,
+    double balance = 0,
   }) {
     return AccountCredential(
-      id: id ?? this.id,
-      bankName: bankName ?? this.bankName,
-      bankIconUrl: bankIconUrl ?? this.bankIconUrl,
-      username: username ?? this.username,
-      password: password ?? this.password,
-      website: website ?? this.website,
-      lastUpdated: lastUpdated ?? this.lastUpdated,
-      brandColor: brandColor ?? this.brandColor,
-      currency: currency ?? this.currency,
-      balance: balance ?? this.balance,
+      id: id ?? const Uuid().v4(),
+      bankName: bankName,
+      bankIconUrl: bankIconUrl,
+      username: username,
+      password: password,
+      website: website,
+      lastUpdated: lastUpdated,
+      brandColor: brandColor,
+      currency: currency,
+      balance: balance,
     );
   }
 
-  Map<String, dynamic> toMap() => {
-    'bankName': bankName,
-    'bankIconUrl': bankIconUrl,
-    'username': username,
-    'password': password,
-    'website': website,
-    'lastUpdated': lastUpdated.millisecondsSinceEpoch,
-    'brandColor': brandColor?.value,
-    'currency': currency,
-    'balance': balance,
-  };
-
-  factory AccountCredential.fromMap(String id, Map<String, dynamic> map) {
-    DateTime toDate(dynamic v) {
-      if (v == null) return DateTime.now();
-      if (v is Timestamp) return v.toDate();
-      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
-      return DateTime.tryParse(v.toString()) ?? DateTime.now();
-    }
-
-    return AccountCredential(
-      id: id,
-      bankName: (map['bankName'] ?? map['bank_name'] ?? 'Bank').toString(),
-      bankIconUrl:
-          (map['bankIconUrl'] ?? map['bank_icon_url'])?.toString(),
-      username: (map['username'] ?? map['login_id'] ?? '').toString(),
-      password: (map['password'] ?? map['login_password'] ?? '').toString(),
-      website: map['website'] as String?,
-      lastUpdated: toDate(
-        map['lastUpdated'] ??
-            map['updated_at'] ??
-            DateTime.now().millisecondsSinceEpoch,
-      ),
-      brandColor: map['brandColor'] != null
-          ? Color(map['brandColor'] as int)
-          : null,
-      currency: (map['currency'] ?? map['accountCurrency'] ?? AppConfig.baseCurrency).toString(),
-      balance: (map['balance'] as num?)?.toDouble() ?? 0,
-    );
-  }
-
-  @override
-  List<Object?> get props => [
-    id,
-    bankName,
-    bankIconUrl,
-    username,
-    password,
-    website,
-    lastUpdated,
-    brandColor,
-    currency,
-    balance,
-  ];
+  factory AccountCredential.fromJson(Map<String, dynamic> json) =>
+      _$AccountCredentialFromJson(json);
 }
+
+Object? _readBankName(Map<dynamic, dynamic> json, String key) =>
+    json['bankName'] ?? json['bank_name'] ?? 'Bank';
+
+Object? _readBankIconUrl(Map<dynamic, dynamic> json, String key) =>
+    json['bankIconUrl'] ?? json['bank_icon_url'];
+
+Object? _readUsername(Map<dynamic, dynamic> json, String key) =>
+    json['username'] ?? json['login_id'] ?? '';
+
+Object? _readPassword(Map<dynamic, dynamic> json, String key) =>
+    json['password'] ?? json['login_password'] ?? '';
+
+Object? _readWebsite(Map<dynamic, dynamic> json, String key) => json['website'];
+
+Object? _readLastUpdated(Map<dynamic, dynamic> json, String key) =>
+    json['lastUpdated'] ??
+    json['updated_at'] ??
+    DateTime.now().millisecondsSinceEpoch;
+
+Object? _readCurrency(Map<dynamic, dynamic> json, String key) =>
+    json['currency'] ?? json['accountCurrency'] ?? AppConfig.baseCurrency;

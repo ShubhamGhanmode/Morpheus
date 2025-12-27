@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
-import 'package:morpheus/config/app_config.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/database/database_helper.dart' show DatabaseHelper;
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/services/encryption_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -124,120 +125,48 @@ class CardRepository {
   }
 
   CreditCard _fromDbRow(Map<String, Object?> row) {
-    final offsetsRaw = row['reminder_offsets'] as String?;
-    final offsets = offsetsRaw == null || offsetsRaw.isEmpty
-        ? <int>[]
-        : offsetsRaw
-            .split(',')
-            .map((v) => int.tryParse(v) ?? 0)
-            .where((v) => v > 0)
-            .toList();
-    return CreditCard(
-      id: row['id'] as String,
-      bankName: row['bank_name'] as String,
-      cardNetwork: row['card_network'] as String?,
-      cardNumber: row['card_number'] as String,
-      holderName: row['card_holder_name'] as String,
-      expiryDate: row['expiry_date'] as String,
-      cvv: (row['cvv'] as String?) ?? '***',
-      cardColor: const Color(0xFF334155),
-      textColor: Colors.white,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
-      billingDay: (row['billing_day'] as int?) ?? 1,
-      graceDays: (row['grace_days'] as int?) ?? 15,
-      usageLimit: (row['usage_limit'] as num?)?.toDouble(),
-      currency: (row['currency'] as String?) ?? AppConfig.baseCurrency,
-      autopayEnabled: (row['autopay_enabled'] as int?) == 1,
-      reminderEnabled: (row['reminder_enabled'] as int?) == 1,
-      reminderOffsets: offsets,
-    );
+    return CreditCard.fromJson(row.cast<String, dynamic>());
   }
 
   Map<String, dynamic> _encryptCard(CreditCard card) {
+    final base = card.toJson();
     return {
-      'id': card.id,
+      ...base,
       'bankName': EncryptionService.encryptData(card.bankName),
-      'bankIconUrl': card.bankIconUrl,
-      'cardNetwork': card.cardNetwork,
       'cardNumber': EncryptionService.encryptData(card.cardNumber),
       'holderName': EncryptionService.encryptData(card.holderName),
       'expiryDate': EncryptionService.encryptData(card.expiryDate),
       'cvv': EncryptionService.encryptData(card.cvv),
-      'cardColor': card.cardColor.value,
-      'textColor': card.textColor.value,
-      'createdAt': (card.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
-      'updatedAt': (card.updatedAt ?? DateTime.now()).millisecondsSinceEpoch,
-      'billingDay': card.billingDay,
-      'graceDays': card.graceDays,
-      'usageLimit': card.usageLimit,
-      'currency': card.currency,
-      'autopayEnabled': card.autopayEnabled,
-      'reminderEnabled': card.reminderEnabled,
-      'reminderOffsets': card.reminderOffsets,
     };
   }
 
   CreditCard _decryptCard(Map<String, dynamic> data) {
-    DateTime? toDate(dynamic v) {
-      if (v == null) return null;
-      if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
-      if (v is Timestamp) return v.toDate();
-      return DateTime.tryParse(v.toString());
-    }
-
     String decrypt(String key, String fallback) {
       final raw = data[key];
       if (raw == null) return fallback;
       try {
         return EncryptionService.decryptData(raw as String);
-      } catch (_) {
+      } catch (e, stack) {
+        unawaited(
+          ErrorReporter.recordError(
+            e,
+            stack,
+            reason: 'Card field decrypt failed',
+            context: {'field': key},
+          ),
+        );
         return fallback;
       }
     }
 
-    List<int> offsetsFrom(dynamic raw) {
-      if (raw is List) {
-        return raw
-            .map((e) => (e as num?)?.toInt() ?? 0)
-            .where((v) => v > 0)
-            .toList();
-      }
-      if (raw is String) {
-        return raw
-            .split(',')
-            .map((e) => int.tryParse(e) ?? 0)
-            .where((v) => v > 0)
-            .toList();
-      }
-      return const [];
-    }
-
-    return CreditCard(
-      id: (data['id'] ?? '').toString(),
-      bankName: decrypt('bankName', 'Unknown'),
-      bankIconUrl: data['bankIconUrl'] as String?,
-      cardNetwork: data['cardNetwork'] as String? ?? data['card_network'] as String?,
-      cardNumber: decrypt('cardNumber', '**** **** **** 0000'),
-      holderName: decrypt('holderName', ''),
-      expiryDate: decrypt('expiryDate', ''),
-      cvv: decrypt('cvv', '***'),
-      cardColor: Color((data['cardColor'] ?? 0xFF334155) as int),
-      textColor: Color((data['textColor'] ?? 0xFFFFFFFF) as int),
-      createdAt: toDate(data['createdAt']),
-      updatedAt: toDate(data['updatedAt']),
-      billingDay: (data['billingDay'] ?? data['billing_day'] ?? 1) as int,
-      graceDays: (data['graceDays'] ?? data['grace_days'] ?? 15) as int,
-      usageLimit: (data['usageLimit'] as num?)?.toDouble(),
-      currency: (data['currency'] ?? data['cardCurrency'] ?? AppConfig.baseCurrency).toString(),
-      autopayEnabled:
-          (data['autopayEnabled'] ?? data['autopay_enabled'] ?? false) as bool,
-      reminderEnabled: (data['reminderEnabled'] ??
-              data['reminder_enabled'] ??
-              false) as bool,
-      reminderOffsets: offsetsFrom(
-        data['reminderOffsets'] ?? data['reminder_offsets'],
-      ),
-    );
+    final decrypted = {
+      ...data,
+      'bankName': decrypt('bankName', 'Unknown'),
+      'cardNumber': decrypt('cardNumber', '**** **** **** 0000'),
+      'holderName': decrypt('holderName', ''),
+      'expiryDate': decrypt('expiryDate', ''),
+      'cvv': decrypt('cvv', '***'),
+    };
+    return CreditCard.fromJson(decrypted);
   }
 }

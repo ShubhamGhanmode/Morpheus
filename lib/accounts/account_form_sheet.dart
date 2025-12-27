@@ -182,7 +182,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final account = AccountCredential(
+    final account = AccountCredential.create(
       id: widget.existing?.id,
       bankName: _bankCtrl.text.trim(),
       bankIconUrl: _bankIconUrl,

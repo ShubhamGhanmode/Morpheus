@@ -8,7 +8,7 @@ import 'package:morpheus/cards/card_cubit.dart';
 import 'package:morpheus/categories/category_cubit.dart';
 import 'package:morpheus/categories/expense_category.dart';
 import 'package:morpheus/config/app_config.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/expenses/bloc/expense_bloc.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/utils/card_balances.dart';
@@ -603,7 +603,7 @@ class _ExpenseFormSheetState extends State<ExpenseFormSheet> {
       return;
     }
     final note = _noteCtrl.text.trim();
-    final expense = Expense(
+    final expense = Expense.create(
       id: widget.existing?.id,
       title: _titleCtrl.text.trim(),
       amount: double.parse(_amountCtrl.text.trim()),

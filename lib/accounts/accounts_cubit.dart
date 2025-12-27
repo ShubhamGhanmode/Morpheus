@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/accounts/accounts_repository.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
+import 'package:morpheus/services/error_reporter.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 
 class AccountsState extends Equatable {
   const AccountsState({
@@ -40,8 +42,18 @@ class AccountsCubit extends Cubit<AccountsState> {
     try {
       final items = await _repository.fetchAccounts();
       emit(state.copyWith(loading: false, items: items));
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Load accounts failed',
+      );
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Load accounts'),
+        ),
+      );
     }
   }
 
@@ -54,8 +66,18 @@ class AccountsCubit extends Cubit<AccountsState> {
         ...state.items.where((a) => a.id != account.id),
       ];
       emit(state.copyWith(loading: false, items: updated));
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Save account failed',
+      );
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Save account'),
+        ),
+      );
     }
   }
 
@@ -69,8 +91,18 @@ class AccountsCubit extends Cubit<AccountsState> {
           items: state.items.where((a) => a.id != id).toList(),
         ),
       );
-    } catch (e) {
-      emit(state.copyWith(loading: false, error: e.toString()));
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Delete account failed',
+      );
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Delete account'),
+        ),
+      );
     }
   }
 }

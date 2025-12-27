@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:morpheus/expenses/models/budget.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/models/planned_expense.dart';
+import 'package:morpheus/expenses/models/recurring_transaction.dart';
+import 'package:morpheus/expenses/models/subscription.dart';
 
 class ExpenseRepository {
   ExpenseRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
@@ -20,6 +22,15 @@ class ExpenseRepository {
   CollectionReference<Map<String, dynamic>> _budgetsRef(String uid) =>
       _firestore.collection('users').doc(uid).collection('budgets');
 
+  CollectionReference<Map<String, dynamic>> _recurringRef(String uid) =>
+      _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('recurring_transactions');
+
+  CollectionReference<Map<String, dynamic>> _subscriptionsRef(String uid) =>
+      _firestore.collection('users').doc(uid).collection('subscriptions');
+
   Future<List<Expense>> fetchExpenses() async {
     final uid = _uid;
     if (uid == null) return [];
@@ -27,20 +38,20 @@ class ExpenseRepository {
       uid,
     ).orderBy('date', descending: true).get();
     return snap.docs
-        .map((d) => Expense.fromMap({'id': d.id, ...d.data()}))
+        .map((d) => Expense.fromJson({'id': d.id, ...d.data()}))
         .toList();
   }
 
   Future<void> addExpense(Expense expense) async {
     final uid = _uid;
     if (uid == null) return;
-    await _expensesRef(uid).doc(expense.id).set(expense.toMap());
+    await _expensesRef(uid).doc(expense.id).set(expense.toJson());
   }
 
   Future<void> updateExpense(Expense expense) async {
     final uid = _uid;
     if (uid == null) return;
-    await _expensesRef(uid).doc(expense.id).update(expense.toMap());
+    await _expensesRef(uid).doc(expense.id).update(expense.toJson());
   }
 
   Future<void> deleteExpense(String expenseId) async {
@@ -56,14 +67,14 @@ class ExpenseRepository {
       uid,
     ).orderBy('startDate', descending: true).get();
     return snap.docs
-        .map((d) => Budget.fromMap({'id': d.id, ...d.data()}))
+        .map((d) => Budget.fromJson({'id': d.id, ...d.data()}))
         .toList();
   }
 
   Future<void> saveBudget(Budget budget) async {
     final uid = _uid;
     if (uid == null) return;
-    await _budgetsRef(uid).doc(budget.id).set(budget.toMap());
+    await _budgetsRef(uid).doc(budget.id).set(budget.toJson());
   }
 
   Future<void> addPlannedExpense(
@@ -78,8 +89,58 @@ class ExpenseRepository {
       final snap = await tx.get(docRef);
       final data = snap.data() ?? {};
       final planned = (data['plannedExpenses'] as List?) ?? [];
-      planned.add(expense.toMap());
+      planned.add(expense.toJson());
       tx.set(docRef, {...data, 'plannedExpenses': planned});
     });
+  }
+
+  Future<List<RecurringTransaction>> fetchRecurringTransactions() async {
+    final uid = _uid;
+    if (uid == null) return [];
+    final snap = await _recurringRef(uid)
+        .orderBy('startDate', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => RecurringTransaction.fromJson({'id': d.id, ...d.data()}))
+        .toList();
+  }
+
+  Future<void> saveRecurringTransaction(
+    RecurringTransaction transaction,
+  ) async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _recurringRef(uid)
+        .doc(transaction.id)
+        .set(transaction.toJson());
+  }
+
+  Future<void> deleteRecurringTransaction(String transactionId) async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _recurringRef(uid).doc(transactionId).delete();
+  }
+
+  Future<List<Subscription>> fetchSubscriptions() async {
+    final uid = _uid;
+    if (uid == null) return [];
+    final snap = await _subscriptionsRef(uid)
+        .orderBy('renewalDate', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => Subscription.fromJson({'id': d.id, ...d.data()}))
+        .toList();
+  }
+
+  Future<void> saveSubscription(Subscription subscription) async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _subscriptionsRef(uid).doc(subscription.id).set(subscription.toJson());
+  }
+
+  Future<void> deleteSubscription(String subscriptionId) async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _subscriptionsRef(uid).doc(subscriptionId).delete();
   }
 }

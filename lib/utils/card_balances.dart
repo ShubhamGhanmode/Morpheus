@@ -1,4 +1,4 @@
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/utils/statement_dates.dart';
 

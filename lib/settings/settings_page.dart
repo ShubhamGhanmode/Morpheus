@@ -7,6 +7,7 @@ import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/theme_contrast.dart';
+import 'package:morpheus/services/error_reporter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,7 +18,16 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final colorScheme = Theme.of(context).colorScheme;
-    return BlocBuilder<SettingsCubit, SettingsState>(
+    return BlocConsumer<SettingsCubit, SettingsState>(
+      listenWhen: (previous, current) =>
+          previous.error != current.error && current.error != null,
+      listener: (context, state) {
+        final message = state.error;
+        if (message == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      },
       builder: (context, state) {
         final colorScheme = Theme.of(context).colorScheme;
         final categoriesState = context.watch<CategoryCubit>().state;
@@ -372,9 +382,16 @@ class SettingsPage extends StatelessWidget {
       if (!launched && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
       }
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Open settings link failed',
+      );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open link')),
+      );
     }
   }
 }

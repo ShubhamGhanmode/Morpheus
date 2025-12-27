@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:morpheus/services/error_reporter.dart';
 
 /// Centralized auth utilities for Google + Firebase.
 class AuthService {
@@ -81,7 +82,12 @@ class AuthService {
       final credential = GoogleAuthProvider.credential(idToken: idToken);
       final userCred = await _auth.signInWithCredential(credential);
       return userCred.user;
-    } catch (_) {
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Silent Google sign-in failed',
+      );
       // Ignore failures; caller will treat as unauthenticated.
       return null;
     }
@@ -96,7 +102,12 @@ class AuthService {
     if (!kIsWeb) {
       try {
         await GoogleSignIn.instance.signOut();
-      } catch (_) {
+      } catch (e, stack) {
+        await ErrorReporter.recordError(
+          e,
+          stack,
+          reason: 'Google sign-out failed',
+        );
         // ignore; still sign out from Firebase below
       }
     }
@@ -108,7 +119,12 @@ class AuthService {
     if (!kIsWeb) {
       try {
         await GoogleSignIn.instance.disconnect();
-      } catch (_) {
+      } catch (e, stack) {
+        await ErrorReporter.recordError(
+          e,
+          stack,
+          reason: 'Google disconnect failed',
+        );
         // ignore
       }
     }

@@ -5,7 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:morpheus/accounts/accounts_cubit.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
 import 'package:morpheus/cards/card_cubit.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/expenses/view/widgets/expense_form_sheet.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/settings/settings_state.dart';

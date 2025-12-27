@@ -143,7 +143,7 @@ class _PlannedExpenseSheetState extends State<PlannedExpenseSheet> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final planned = PlannedExpense(
+    final planned = PlannedExpense.create(
       title: _titleCtrl.text.trim(),
       amount: double.parse(_amountCtrl.text.trim()),
       dueDate: _dueDate,

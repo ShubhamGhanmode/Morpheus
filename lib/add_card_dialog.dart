@@ -5,7 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:morpheus/banks/bank_repository.dart';
 import 'package:morpheus/banks/bank_search_cubit.dart';
 import 'package:morpheus/config/app_config.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/widgets/color_picker.dart';
 

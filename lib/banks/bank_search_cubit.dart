@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/banks/bank_repository.dart';
+import 'package:morpheus/services/error_reporter.dart';
+import 'package:morpheus/utils/error_mapper.dart';
 
 class BankSearchState {
   final String query;
@@ -55,8 +57,18 @@ class BankSearchCubit extends Cubit<BankSearchState> {
             error: banks.isEmpty && query.isNotEmpty ? 'No matches' : null,
           ),
         );
-      } catch (e) {
-        emit(state.copyWith(loading: false, error: e.toString()));
+      } catch (e, stack) {
+        await ErrorReporter.recordError(
+          e,
+          stack,
+          reason: 'Bank search failed',
+        );
+        emit(
+          state.copyWith(
+            loading: false,
+            error: errorMessage(e, action: 'Search banks'),
+          ),
+        );
       }
     });
   }

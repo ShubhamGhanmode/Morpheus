@@ -1,245 +1,447 @@
-# Morpheus
+<div align="center">
 
-A Flutter finance companion with budgets, expenses, cards, accounts, and secure cloud sync.
+# 💰 Morpheus
 
-## Features
-- Expenses and budgets: add/edit/delete, plan future spend, set period budgets, and view analytics.
-- Cards: add/edit/delete, set billing day and grace days, usage limits, and view utilization.
-- Card payments: record partial/full payments and link them to accounts for clean ledgers.
-- Accounts and payment sources: cash, bank accounts, wallets, or cards.
-- Categories: Firestore-backed categories with optional emoji labels.
-- Notifications: local testing, push reminders via Cloud Tasks + FCM, and test push in card UI when Test Mode is enabled.
-- Security: app lock with device auth and encrypted storage for sensitive fields.
-- Auth: Google Sign-In with silent restore (no email/password auth).
-- Export: CSV export for expenses plus budget summary and future expenses.
-- Forex: multi-currency handling with automatic FX rate fetch and budget conversions.
-- Offline-friendly: local SQLite cache for cards and bank icon data with Firestore sync.
+### A Modern Personal Finance Companion
 
-## Requirements
-- Flutter SDK (current project built on 3.38) (see pubspec.yaml).
-- Firebase project with Google Sign-In enabled.
-- Android/iOS tooling (Android Studio/Xcode) and a configured emulator/device.
+[![Flutter](https://img.shields.io/badge/Flutter-3.38+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.8+-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Cloud-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-## Quick Start
-1. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-2. Configure Firebase (see setup below):
-   ```bash
-   flutterfire configure
-   ```
-3. Run the app:
-   ```bash
-   flutter run
-   ```
+**Track expenses • Manage credit cards • Set budgets • Stay on top of your finances**
 
-## Project Overview
-Morpheus is a personal finance companion built with Flutter. It combines a local-first UX
-(SQLite caching, fast UI) with Firebase cloud sync for accounts, cards, and expenses.
-Sensitive fields are encrypted in-app before they are written to Firestore. The app also
-supports card payment reminders, device app lock, and dashboard summaries.
+[Features](#-features) • [Screenshots](#-screenshots) • [Architecture](#-architecture) • [Getting Started](#-getting-started) • [Tech Stack](#-tech-stack)
 
-Highlights:
-- Local + cloud sync with offline-friendly reads.
-- Encrypted storage for sensitive card/account data.
-- Push notifications for card reminders using Cloud Tasks + FCM.
-- Monthly per-card spend/utilization snapshots generated on the server.
+</div>
 
-## Data Model (Firestore)
-User-scoped documents:
-- users/{uid}/cards/{cardId}
-  - encrypted fields: bankName, holderName, cardNumber, expiryDate, cvv
-  - reminders: reminderEnabled, reminderOffsets, billingDay, graceDays
-- users/{uid}/accounts/{accountId} (encrypted fields)
-- users/{uid}/expenses/{expenseId}
-- users/{uid}/expense_categories/{categoryId} with fields: name, emoji
-- users/{uid}/deviceTokens/{token}
-- users/{uid}: timezone, timezoneUpdatedAt
-- users/{uid}/reminderLogs/{cardId_offset_dueDate}
-- users/{uid}/cardReminderTasks/{cardId}
-- users/{uid}/cardSnapshots/{YYYY-MM}
+---
 
-## Local Storage (SQLite)
-- File: morpheus.db (sqflite).
-- Table: credit_cards (local cache).
-- Cache is scoped per user; when uid changes, the local card cache is cleared and reloaded.
-- Bank icons come from assets/tables/banks.sqlite.
+## 🎯 What is Morpheus?
 
-## Transactions and Ledgers
-- paymentSourceType: cash, card, account, wallet.
-- transactionType: spend or transfer.
-- Card payments are recorded as two expenses (account debit + card credit).
-- Ledger pages exist for both accounts and cards.
+Morpheus is a **full-featured personal finance app** built with Flutter that demonstrates industry-standard mobile development practices. It combines a **local-first architecture** with **real-time cloud sync**, providing a seamless experience whether you're online or offline.
 
-## Configuration
-- Currency settings live in lib/config/app_config.dart:
-  - baseCurrency
-  - secondaryCurrency
-  - enableSecondaryCurrency
-- Encryption keys are in lib/services/encryption_service.dart.
-  Keep secrets out of the repo and sync the values to Cloud Functions.
+### Why This Project Stands Out
 
-## Firebase Setup Guide (Personal Use)
-This repo intentionally does NOT include:
-- android/app/google-services.json
-- ios/Runner/GoogleService-Info.plist
-- any private encryption keys or function secrets
+| Aspect | Implementation |
+|--------|----------------|
+| **Architecture** | Clean separation with BLoC/Cubit pattern, repository layer, and service abstraction |
+| **Security** | AES-256 encryption for sensitive data before cloud storage |
+| **Cloud Infrastructure** | Firebase Auth, Firestore, Cloud Functions (Gen 2), Cloud Tasks, FCM |
+| **Offline Support** | SQLite caching with automatic Firestore synchronization |
+| **Code Quality** | Freezed models, type-safe JSON serialization, comprehensive error handling |
+| **Notifications** | Timezone-aware push reminders via Cloud Tasks pipeline |
 
-Follow these steps to bootstrap your own Firebase project.
+---
 
-### 0) Quick checklist for using your own Firebase project
-- Replace android/app/google-services.json and ios/Runner/GoogleService-Info.plist with your own.
-- Update .firebaserc or run firebase use --add to point to your project.
-- Run flutterfire configure to generate lib/firebase_options.dart.
-- Update functions/.env.<projectId> with your secrets.
-- If you change regions, update REGION in functions/index.js and the callable region in lib/services/notification_service.dart.
+## ✨ Features
 
-### 1) Create a Firebase project
-1. Go to the Firebase Console and create a new project.
-2. Enable Google Analytics only if you want it.
+### 💳 Credit Card Management
+- Track multiple credit cards with billing cycles
+- Set usage limits and monitor utilization
+- **Smart payment reminders** with configurable offsets (e.g., 3 days before due date)
+- Record partial/full payments linked to accounts
+- Per-card spending analytics and monthly snapshots
 
-### 2) Register app targets
-Register each platform you plan to run:
-- Android: package name from android/app/src/main/AndroidManifest.xml
-- iOS: bundle ID from ios/Runner.xcodeproj
+### 📊 Expense Tracking
+- Log expenses with categories, notes, and payment sources
+- **Multi-currency support** with automatic FX rate conversion
+- Plan future expenses and recurring transactions
+- Dashboard with spending analytics and charts
 
-Download:
-- google-services.json -> place at android/app/google-services.json
-- GoogleService-Info.plist -> place at ios/Runner/GoogleService-Info.plist
+### 💰 Budget Management
+- Set period-based budgets (weekly, monthly, yearly)
+- Category-specific budget tracking
+- Real-time budget utilization alerts
+- Cross-currency budget calculations
 
-These files should stay local; do not commit them.
+### 🏦 Accounts & Payment Sources
+- Track bank accounts, wallets, and cash
+- Complete ledger history per account
+- Balance tracking across payment sources
 
-### 3) Enable Firebase products
-In Firebase Console:
-- Authentication: enable Google Sign-In
-- Firestore: create a database (production or test mode)
-- Cloud Messaging: keep defaults (used by FCM)
+### 🔐 Security & Privacy
+- **Biometric/PIN app lock** using device authentication
+- **Client-side encryption** for sensitive card data (card numbers, CVV, etc.)
+- User-scoped data isolation in Firestore
+- No third-party analytics or tracking
 
-### 3b) Deploy security rules
-This repo includes firestore.rules and storage.rules:
-```bash
-firebase deploy --only firestore,storage
+### 📱 User Experience
+- Material 3 design with customizable themes
+- Offline-first with instant UI responses
+- CSV export for expenses and budgets
+- Google Sign-In with silent session restore
+
+---
+
+## 📸 Screenshots
+
+<!-- Add your screenshots here -->
+<div align="center">
+<i>Screenshots coming soon</i>
+
+<!-- Example format when you add screenshots:
+<img src="screenshots/dashboard.png" width="200" alt="Dashboard" />
+<img src="screenshots/cards.png" width="200" alt="Cards" />
+<img src="screenshots/expenses.png" width="200" alt="Expenses" />
+<img src="screenshots/budgets.png" width="200" alt="Budgets" />
+-->
+</div>
+
+---
+
+## 🏗 Architecture
+
+Morpheus follows a **clean, layered architecture** designed for maintainability and testability:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        UI Layer                         │
+│         (Pages, Widgets, Sheets, Dialogs)               │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+┌─────────────────────────▼───────────────────────────────┐
+│                    State Management                     │
+│              (BLoC / Cubit + Equatable)                 │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+┌─────────────────────────▼───────────────────────────────┐
+│                   Repository Layer                      │
+│        (Firestore sync + SQLite cache logic)            │
+└──────────────┬──────────────────────────┬───────────────┘
+               │                          │
+┌──────────────▼──────────┐  ┌────────────▼───────────────┐
+│     Cloud Services      │  │      Local Storage         │
+│  (Firestore, FCM, Auth) │  │   (SQLite, SecureStorage)  │
+└─────────────────────────┘  └────────────────────────────┘
 ```
 
-### 4) Configure Google Sign-In (Android)
-Add SHA-1 and SHA-256 to your Android app in Firebase Console:
+### Key Design Decisions
+
+- **Offline-First**: SQLite cache ensures fast reads; Firestore streams handle real-time sync
+- **Encrypted at Rest**: Sensitive fields (card numbers, CVV) are AES-encrypted before upload
+- **Server-Side Scheduling**: Cloud Tasks enable per-user timezone-aware reminder delivery
+- **Platform Abstraction**: Conditional exports (`_io.dart` / `_web.dart`) for platform-specific code
+
+---
+
+## 🛠 Tech Stack
+
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| **Flutter 3.38+** | Cross-platform UI framework |
+| **Dart 3.8+** | Programming language with null safety |
+| **flutter_bloc** | State management (BLoC/Cubit pattern) |
+| **freezed** | Immutable data classes with code generation |
+| **fl_chart** | Beautiful expense visualization charts |
+| **sqflite** | Local SQLite database for offline caching |
+
+### Backend (Firebase)
+| Technology | Purpose |
+|------------|---------|
+| **Firebase Auth** | Google Sign-In authentication |
+| **Cloud Firestore** | Real-time NoSQL database |
+| **Cloud Functions (Gen 2)** | Serverless backend logic |
+| **Cloud Tasks** | Scheduled reminder delivery |
+| **Cloud Messaging (FCM)** | Push notifications |
+| **Crashlytics** | Crash reporting and analytics |
+
+### Security
+| Technology | Purpose |
+|------------|---------|
+| **flutter_secure_storage** | Encrypted key-value storage |
+| **local_auth** | Biometric/PIN authentication |
+| **crypto / encrypt** | AES-256 encryption for sensitive data |
+| **Sentry** | Error monitoring and reporting |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+| Tool | Version | Installation Guide |
+|------|---------|-------------------|
+| **Flutter SDK** | 3.38+ | [flutter.dev/docs/get-started](https://flutter.dev/docs/get-started/install) |
+| **Dart SDK** | 3.8+ | Included with Flutter |
+| **Android Studio** | Latest | [developer.android.com](https://developer.android.com/studio) |
+| **Xcode** (macOS only) | 14+ | Mac App Store |
+| **Node.js** | 18+ | [nodejs.org](https://nodejs.org) (for Cloud Functions) |
+| **Firebase CLI** | Latest | `npm install -g firebase-tools` |
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/morpheus.git
+cd morpheus
+```
+
+### Step 2: Install Flutter Dependencies
+
+```bash
+flutter pub get
+```
+
+### Step 3: Set Up Firebase (Required)
+
+This project requires your own Firebase project. Follow these steps:
+
+#### 3.1 Create a Firebase Project
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Click **"Create a project"** or **"Add project"**
+3. Name your project (e.g., "morpheus-finance")
+4. Enable/disable Google Analytics (optional)
+5. Click **"Create project"**
+
+#### 3.2 Register Your App
+
+**For Android:**
+1. In Firebase Console, click **"Add app"** → Android
+2. Package name: `com.example.morpheus` (or check `android/app/build.gradle.kts`)
+3. Download `google-services.json`
+4. Place it in `android/app/google-services.json`
+
+**For iOS:**
+1. Click **"Add app"** → iOS
+2. Bundle ID: Check `ios/Runner.xcodeproj/project.pbxproj`
+3. Download `GoogleService-Info.plist`
+4. Place it in `ios/Runner/GoogleService-Info.plist`
+
+#### 3.3 Enable Firebase Services
+
+In Firebase Console, enable these services:
+
+| Service | Location | Settings |
+|---------|----------|----------|
+| **Authentication** | Build → Authentication → Sign-in method | Enable **Google** provider |
+| **Cloud Firestore** | Build → Firestore Database | Create database (start in **test mode** for development) |
+| **Cloud Messaging** | Engage → Messaging | Enabled by default |
+
+#### 3.4 Configure Android SHA Keys (Required for Google Sign-In)
+
 ```bash
 cd android
 ./gradlew signingReport
 ```
-Copy the SHA-1/SHA-256 for your debug keystore and add them under the Android app settings in Firebase Console.
 
-### 5) Configure iOS push (optional but recommended)
-If you want push notifications on iOS:
-- Create an APNs key in Apple Developer portal
-- Upload the .p8 key to Firebase -> Project Settings -> Cloud Messaging
+Copy the **SHA-1** and **SHA-256** fingerprints and add them in:
+- Firebase Console → Project Settings → Your Android app → Add fingerprint
 
-### 6) Secrets and encryption
-This project uses EncryptionService for sensitive data. Replace the default key/IV in:
-- lib/services/encryption_service.dart
+#### 3.5 Generate Firebase Options
 
-For Cloud Functions, set env params in functions/.env.<projectId>:
-```
-CARD_ENCRYPTION_KEY=your-32-char-key
-CARD_ENCRYPTION_IV=your-16-char-iv
-TASKS_WEBHOOK_SECRET=your-long-random-secret
-```
-
-### 7) Deploy functions (for push reminders)
 ```bash
+# Install FlutterFire CLI if not installed
+dart pub global activate flutterfire_cli
+
+# Configure (select your project and platforms)
+flutterfire configure
+```
+
+This generates `lib/firebase_options.dart`.
+
+### Step 4: Deploy Firestore Security Rules
+
+```bash
+firebase login
+firebase use YOUR_PROJECT_ID
+firebase deploy --only firestore,storage
+```
+
+### Step 5: Run the App
+
+```bash
+# For Android
+flutter run
+
+# For iOS (macOS only)
+cd ios && pod install && cd ..
+flutter run
+```
+
+🎉 **Congratulations!** The app should now be running on your device/emulator.
+
+---
+
+## ⚡ Advanced Setup (Optional)
+
+### Push Notifications with Cloud Tasks
+
+For timezone-aware card payment reminders, you need to deploy Cloud Functions:
+
+> **Note**: Cloud Functions require the Firebase **Blaze (pay-as-you-go)** plan.
+
+#### 1. Set Up Secrets
+
+```bash
+# Navigate to functions directory
 cd functions
 npm install
+
+# Set required secrets
+firebase functions:secrets:set TASKS_WEBHOOK_SECRET
+firebase functions:secrets:set CARD_ENCRYPTION_KEY
+firebase functions:secrets:set CARD_ENCRYPTION_IV
+```
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `TASKS_WEBHOOK_SECRET` | Protects task endpoint from abuse | Any long random string |
+| `CARD_ENCRYPTION_KEY` | 32-character AES key | Must match `encryption_service.dart` |
+| `CARD_ENCRYPTION_IV` | 16-character IV | Must match `encryption_service.dart` |
+
+#### 2. Create Cloud Tasks Queue
+
+```bash
+gcloud tasks queues create card-reminders --location=europe-west1
+```
+
+#### 3. Deploy Functions
+
+```bash
 firebase deploy --only functions
 ```
+
 This deploys:
-- reminder scheduler and task handler (Cloud Tasks)
-- test push function
-- monthly snapshot job
+- `syncCardReminders` - Firestore trigger for card changes
+- `sendCardReminderTask` - HTTP handler for Cloud Tasks
+- `sendCardReminders` - Daily reconciliation job
+- `computeMonthlyCardSnapshots` - Monthly summary generator
 
-Note: Firebase Functions require the Blaze (pay-as-you-go) plan.
+#### 4. Enable Required APIs
 
-## Cloud Tasks (Card Reminder Push)
-This app uses a Cloud Tasks pipeline to send timezone-aware card reminder push notifications.
+In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable:
+- Cloud Tasks API
+- Cloud Scheduler API
+- Cloud Run API
+- Eventarc API
 
-### Why Cloud Tasks
-- Accurate timing: schedule reminders per user timezone instead of a single UTC sweep.
-- Lower cost: tasks run only when needed; no hourly scans across all cards.
-- Resilient: tasks are retried by Cloud Tasks, and a daily reconcile fixes drift.
+### iOS Push Notifications
 
-### Architecture (Step-by-step)
-1. App startup stores timezone at users/{uid}.timezone.
-2. Card writes (users/{uid}/cards/{cardId}) trigger syncCardReminders.
-3. syncCardReminders deletes old tasks and schedules new ones for each offset.
-4. Each task hits sendCardReminderTask, which:
-   - validates the payload and card config
-   - sends FCM push to users/{uid}/deviceTokens
-   - logs the send in users/{uid}/reminderLogs/{cardId_offset_dueDate}
-   - enqueues the next task for the same offset
-5. sendCardReminders runs daily at 03:00 UTC to reconcile missing/expired tasks.
+1. Create an APNs key in [Apple Developer Portal](https://developer.apple.com)
+2. Upload the `.p8` key to Firebase Console → Project Settings → Cloud Messaging
 
-### Key resources
-- Queue: card-reminders (region europe-west1)
-- Task handler: sendCardReminderTask (HTTP)
-- Resync triggers: syncCardReminders (card writes), syncUserTimezone (timezone changes)
-- Task registry: users/{uid}/cardReminderTasks/{cardId}
-- Logs: users/{uid}/reminderLogs/{cardId_offset_dueDate}
+---
 
-### Setup guide
-1. Install functions dependencies:
-   ```bash
-   cd functions
-   npm install
-   ```
-2. Configure env params (recommended):
-   - TASKS_WEBHOOK_SECRET (required for securing the task endpoint)
-   - CARD_ENCRYPTION_KEY, CARD_ENCRYPTION_IV (if you are not using defaults)
-   You can set them in .env.<projectId> or via:
-   ```bash
-   firebase functions:config:set TASKS_WEBHOOK_SECRET="..." CARD_ENCRYPTION_KEY="..." CARD_ENCRYPTION_IV="..."
-   ```
-3. Ensure the queue exists (auto-created at runtime, or create once):
-   ```bash
-   gcloud tasks queues create card-reminders --location=europe-west1
-   ```
-4. Deploy:
-   ```bash
-   firebase deploy --only functions
-   ```
-5. Launch the app once so it stores timezone and registers FCM tokens.
+## 📁 Project Structure
 
-### Testing
-- Enable Test Mode in Settings and tap "Test push" on a card.
-- Verify logs appear under users/{uid}/reminderLogs.
-- Check Cloud Tasks queue for scheduled tasks in europe-west1.
+```
+morpheus/
+├── lib/
+│   ├── main.dart                 # App entry point
+│   ├── navigation_bar.dart       # Bottom navigation shell
+│   ├── accounts/                 # Accounts feature module
+│   ├── auth/                     # Authentication (BLoC pattern)
+│   ├── bills/                    # Bills calendar feature
+│   ├── cards/                    # Credit cards feature
+│   ├── categories/               # Expense categories
+│   ├── config/                   # App configuration
+│   ├── expenses/                 # Expenses feature (full module)
+│   │   ├── bloc/                 # ExpenseBloc + events/states
+│   │   ├── models/               # Freezed data models
+│   │   ├── repositories/         # Firestore + cache logic
+│   │   └── view/                 # UI pages and widgets
+│   ├── services/                 # Core services
+│   │   ├── encryption_service.dart
+│   │   ├── notification_service.dart
+│   │   └── forex_service.dart
+│   ├── theme/                    # Material 3 theming
+│   └── utils/                    # Shared utilities
+├── functions/                    # Firebase Cloud Functions (Node.js)
+│   └── index.js
+├── firestore.rules               # Firestore security rules
+└── pubspec.yaml
+```
 
-### Troubleshooting
-- 500 errors during deploy: ensure Cloud Run, Eventarc, Tasks APIs are enabled.
-- Tasks not firing: verify the queue exists in europe-west1 and the task handler is deployed.
-- 403 from task handler: set TASKS_WEBHOOK_SECRET and confirm the header is sent.
+---
 
-### Cost controls
-- The reconcile job runs once per day instead of hourly.
-- The monthly snapshot job uses maxInstances: 1 and runs only once per month.
-- Task queue rate limits are capped to avoid spikes.
+## 🧪 Testing
 
-### Security
-- TASKS_WEBHOOK_SECRET protects the task handler from public abuse.
-- Functions are deployed in europe-west1 for EU latency.
+```bash
+# Run unit tests
+flutter test
 
-### Required APIs
-- Cloud Tasks, Cloud Scheduler, Cloud Run, Eventarc, Pub/Sub
+# Run integration tests
+flutter test integration_test/
 
-## Notes
-- Permissions: exports request storage access on Android; files land in Download/morpheus_exports/ (or Documents on other platforms).
-- Encryption: cards/accounts are encrypted before Firestore writes; decryption happens on fetch. Existing unencrypted docs should be re-saved to apply encryption.
-- Bank icons: the bundled banks.sqlite supplies bank icons; these are stored with cards and shown beside bank names.
-- Customization: card color picker supports presets and custom hues; theming lives under lib/theme/.
+# Format code
+dart format lib
 
-## Scripts
-- Format code: dart format lib
-- Run app: flutter run
-- Run tests: flutter test
+# Analyze code
+flutter analyze
+```
 
-## License
-MIT license.
+### Test Files
+- `test/expense_service_test.dart` - Expense service unit tests
+- `test/statement_dates_test.dart` - Statement date calculations
+- `integration_test/expense_form_sheet_test.dart` - Expense form integration
+- `integration_test/bills_calendar_page_test.dart` - Bills calendar integration
+
+---
+
+## 🔧 Configuration
+
+### Currency Settings
+Edit `lib/config/app_config.dart`:
+```dart
+static const String baseCurrency = 'EUR';
+static const String secondaryCurrency = 'USD';
+static const bool enableSecondaryCurrency = true;
+```
+
+### Encryption Keys
+Edit `lib/services/encryption_service.dart`:
+```dart
+// Replace with your own 32-char key and 16-char IV
+static const String _key = 'YOUR_32_CHARACTER_KEY_HERE_____';
+static const String _iv = 'YOUR_16_CHAR_IV_';
+```
+
+> ⚠️ **Important**: Never commit real encryption keys to version control!
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read the [AGENTS.md](AGENTS.md) file for:
+- Architecture guidelines
+- Code conventions
+- State management patterns
+- Testing requirements
+
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `flutter test`
+5. Commit: `git commit -m 'Add amazing feature'`
+6. Push: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Flutter](https://flutter.dev) - Beautiful native apps in record time
+- [Firebase](https://firebase.google.com) - Backend infrastructure
+- [flutter_bloc](https://bloclibrary.dev) - State management
+- [freezed](https://pub.dev/packages/freezed) - Immutable data classes
+- [fl_chart](https://pub.dev/packages/fl_chart) - Charts and graphs
+
+---
+
+<div align="center">
+
+**Built with ❤️ using Flutter**
+
+If you found this project helpful, please consider giving it a ⭐
+
+</div>

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:morpheus/bills_calendar_page.dart';
-import 'package:morpheus/creditcard_management_page.dart';
+import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/utils/statement_dates.dart';
 
@@ -52,7 +52,7 @@ void main() {
     );
 
     final expenses = [
-      Expense(
+      Expense.create(
         title: 'Coffee',
         amount: 20,
         currency: 'EUR',
@@ -61,7 +61,7 @@ void main() {
         paymentSourceType: 'card',
         paymentSourceId: autopayCard.id,
       ),
-      Expense(
+      Expense.create(
         title: 'Fuel',
         amount: 50,
         currency: 'EUR',
