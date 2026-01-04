@@ -366,6 +366,7 @@ class _CreditCardManagementPageState extends State<CreditCardManagementPage> wit
                       ],
                     ),
               floatingActionButton: FloatingActionButton.extended(
+                heroTag: 'cards_fab',
                 onPressed: _onAddCard,
                 icon: const Icon(Icons.add_card),
                 label: const Text('New card'),

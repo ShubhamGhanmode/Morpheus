@@ -45,6 +45,7 @@ Morpheus is a **full-featured personal finance app** built with Flutter that dem
 
 ### 📊 Expense Tracking
 - Log expenses with categories, notes, and payment sources
+- Smart expense search with filters and query syntax
 - **Multi-currency support** with automatic FX rate conversion
 - Plan future expenses and recurring transactions
 - Dashboard with spending analytics and charts
@@ -69,7 +70,7 @@ Morpheus is a **full-featured personal finance app** built with Flutter that dem
 ### 📱 User Experience
 - Material 3 design with customizable themes
 - Offline-first with instant UI responses
-- CSV export for expenses and budgets
+- CSV export for expenses, budget summary, and planned expenses (separate files)
 - Google Sign-In with silent session restore
 
 ---

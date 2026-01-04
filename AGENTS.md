@@ -10,12 +10,15 @@ Build an industry-standard finance app with modular, maintainable code and a cle
 - Prefer `rg` for search and `apply_patch` for single-file edits.
 - Keep edits ASCII unless a file already uses Unicode.
 - Avoid removing unrelated changes in a dirty worktree.
+- When asked for a commit message, base it on staged changes (`git diff --staged`).
 
 ## Project Overview
 Morpheus is a Flutter finance companion with:
 - Expenses, budgets, accounts, and credit card management.
 - Bills calendar and recurring transaction tracking.
 - Subscriptions and planned expenses management.
+- Expense search with Material 3 search bar, query parsing, and quick filters.
+- CSV export creates separate files for expenses, budget summary, and planned expenses.
 - Firestore + Firebase Auth cloud sync.
 - Local SQLite cache for credit cards and bank icon data.
 - Encrypted storage for sensitive fields before upload.
@@ -168,6 +171,7 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 
 **Expenses Module**
 - Expenses dashboard: `lib/expenses/view/expense_dashboard_page.dart`
+- Expense search page: `lib/expenses/view/expense_search_page.dart`
 - Expense form: `lib/expenses/view/widgets/expense_form_sheet.dart`
 - Planned expenses: `lib/expenses/view/widgets/planned_expense_sheet.dart`
 - Expense Bloc: `lib/expenses/bloc/expense_bloc.dart`
@@ -195,6 +199,13 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 - FX rates: `lib/services/forex_service.dart`
 - Error reporting: `lib/services/error_reporter.dart`
 - Export: `lib/services/export_service.dart`
+- Category classifier: `lib/expenses/services/expense_classifier_service.dart`
+
+**ML/AI**
+- Classifier cubit: `lib/expenses/expense_classifier_cubit.dart`
+- Classifier service: `lib/expenses/services/expense_classifier_service.dart`
+- Prediction model: `lib/expenses/models/category_prediction.dart`
+- Cloud Function: `predictExpenseCategory` in `functions/index.js`
 
 **Utilities & Config**
 - Card balances: `lib/utils/card_balances.dart`, `lib/utils/statement_dates.dart`
@@ -254,6 +265,7 @@ User-scoped documents:
 - `users/{uid}/accounts/{accountId}` (encrypted fields)
 - `users/{uid}/expenses/{expenseId}`
 - `users/{uid}/expense_categories/{categoryId}` with fields: name, emoji
+- `users/{uid}/expense_category_model/meta` with subcollections: tokens (per token counts) and ledger (per expense training snapshot)
 - `users/{uid}/budgets/{budgetId}` with fields: name, amount, currency, categoryId, period
 - `users/{uid}/subscriptions/{subscriptionId}` with fields: name, amount, frequency, nextDate
 - `users/{uid}/plannedExpenses/{id}` for future scheduled expenses
@@ -366,6 +378,96 @@ Typical write flow:
 - Emoji is optional but stored as empty string, not null.
 - UI shows categories as "emoji + space + name".
 
+## ML Category Classifier
+The app uses a **Naive Bayes text classifier** to predict expense categories.
+
+**Architecture:**
+```
+[User types expense title]
+    |
+    v
+[ExpenseClassifierCubit] -- debounces 400ms (typing) / immediate on blur
+    |
+    v
+[ExpenseClassifierService] -- caches results
+    |
+    v
+[predictExpenseCategory Cloud Function]
+    |
+    v
+[Naive Bayes inference on Firestore model]
+```
+
+**Training Pipeline (automatic):**
+1. User saves expense with title + category
+2. `syncExpenseCategoryModel` Firestore trigger fires
+3. Tokenizes title (stopwords removed, stemming applied, bigrams generated)
+4. Updates per-category token counts in `users/{uid}/expense_category_model/`
+5. Tracks document frequency for TF-IDF weighting
+6. Stores ledger entry for delta tracking on edits/deletes
+
+**Prediction Flow:**
+1. UI calls `ExpenseClassifierCubit.predict(title)`
+2. Debounced call to Cloud Function (typing) or immediate on blur
+3. Function tokenizes input (with stemming), fetches model from Firestore
+4. Computes TF-IDF weighted log-probability per category using Naive Bayes
+5. Returns top 3 predictions with confidence scores
+6. UI auto-selects on blur if confidence > 80%, else shows chips
+
+Additional UI helpers:
+- Recent chips use the latest expenses (top 3 categories).
+- Rule-based chips match keyword lists against the title (default categories only).
+
+**Model Storage (Firestore):**
+- `users/{uid}/expense_category_model/meta` - totalDocs, categoryDocCounts, categoryTokenTotals
+- `users/{uid}/expense_category_model/tokens/{token}` - per-token counts by category + docFreq (for IDF)
+- `users/{uid}/expense_category_model/ledger/{expenseId}` - training sample for delta updates
+
+**Key Features:**
+- Incremental training (no batch retraining needed)
+- Porter Stemming - reduces words to root form ("running" -> "run", "purchases" -> "purchas")
+- TF-IDF weighting - gives more weight to rare/distinctive words
+- Stopword filtering for noise reduction
+- Bigram support for phrase matching ("credit_card")
+- Number normalization ("<NUM>", "<YEAR>")
+- Irregular word handling ("bought" -> "buy", "paid" -> "pay")
+- Laplace smoothing for unseen tokens
+- Cold start protection (min 5 docs)
+- Client-side caching and debouncing
+- Recent category chips (top 3) from expense history
+- Rule-based suggestions for default categories only (keyword lists)
+
+**TF-IDF Formula:**
+```
+TF = token_count_in_title / total_tokens_in_title
+IDF = log(total_docs / (doc_freq + 1)) + 1   (doc_freq clamped to [1, total_docs])
+Weight = TF * IDF
+```
+
+**Model Storage (Firestore) - Meta Fields:**
+- `totalDocs` - number of training documents
+- `vocabularySize` - global count of unique tokens (for consistent Laplace smoothing)
+- `categoryDocCounts` - documents per category
+- `categoryTokenTotals` - token counts per category
+
+**Implementation Details:**
+- Document frequency tracks unique tokens per expense (not token frequency)
+- docFreq updates when tokens change, even if category stays the same
+- Global vocabularySize used for Laplace smoothing (not request token count)
+- IDF fallback uses safe clamp: `max(1, min(totalDocs, docFreq))`
+- Bigrams clamped to `CLASSIFIER_MAX_TOKEN_LENGTH` (32 chars)
+- Predictions limited to top 3 to match UX requirement
+
+**Tuning Constants (functions/index.js):**
+- `CLASSIFIER_MIN_DOCS_FOR_PREDICTION` - minimum training samples
+- `CLASSIFIER_PRIOR_SMOOTHING` - prior probability smoothing
+- `CLASSIFIER_TOKEN_SMOOTHING` - likelihood smoothing
+- `CLASSIFIER_ENABLE_BIGRAMS` - toggle bigram features
+- `CLASSIFIER_ENABLE_STEMMING` - toggle Porter stemmer
+- `CLASSIFIER_ENABLE_TFIDF` - toggle TF-IDF weighting
+- `CLASSIFIER_MAX_TOKEN_LENGTH` - max chars per token (32)
+- `CLASSIFIER_STOPWORDS` - words to ignore
+
 ## Config and Currency
 - Single source for currencies and defaults: `lib/config/app_config.dart`.
   - baseCurrency
@@ -391,8 +493,10 @@ Region: `europe-west1`
 - sendCardReminders: daily reconcile for missing tasks.
 - syncCardReminders: Firestore onWrite trigger for cards.
 - syncUserTimezone: Firestore onWrite trigger for user timezone changes.
+- syncExpenseCategoryModel: Firestore onWrite trigger for expenses -> updates category classifier.
 - sendCardReminderTask: HTTP handler invoked by Cloud Tasks.
 - sendTestPush: Callable function for UI test button.
+- predictExpenseCategory: Callable function for category predictions.
 - computeMonthlyCardSnapshots: monthly server-side summary.
 
 Cloud Tasks queue:
@@ -468,11 +572,18 @@ flutter test integration_test/         # Integration tests
 - Reminder scheduling in Firestore and Cloud Tasks queue.
 - Monthly snapshot writes in Firestore (runs on 1st each month).
 - Expense add/edit with each payment source and category.
+- Expense search: query syntax, quick filters, and result list behavior.
+- Export: pick a date range and verify expenses, budget summary, and planned expenses CSVs open cleanly.
 - Account ledger reflects expenses and credits correctly.
 - Currency conversion shows base and secondary values consistently.
 - Offline mode: cached cards/expenses render without crash.
 - Bills calendar shows upcoming and past bills correctly.
 - Subscriptions are tracked and due dates are accurate.
+
+**Expense search notes:**
+- Expense search reads live data from `ExpenseBloc`, `CardCubit`, and `AccountsCubit`; route pushes must pass those providers across the Navigator boundary.
+- Search index refresh uses content signatures, so it updates even when list instances are reused.
+- Amount filters (`min`, `max`, `>`, `<`) apply to signed amounts; use `type:transfer` when filtering credits.
 
 ## Common Pitfalls
 - Missing `FlutterFragmentActivity` causes biometric auth to fail.

@@ -11,6 +11,7 @@ import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/services/export_service.dart';
 import 'package:morpheus/services/error_reporter.dart';
 import 'package:morpheus/expenses/bloc/expense_bloc.dart';
+import 'package:morpheus/expenses/expense_classifier_cubit.dart';
 import 'package:morpheus/expenses/models/budget.dart';
 import 'package:morpheus/expenses/models/expense.dart';
 import 'package:morpheus/expenses/models/next_occurrence.dart';
@@ -27,6 +28,7 @@ import 'package:morpheus/expenses/view/widgets/expense_form_sheet.dart';
 import 'package:morpheus/expenses/view/widgets/planned_expense_sheet.dart';
 import 'package:morpheus/expenses/view/widgets/recurring_transaction_sheet.dart';
 import 'package:morpheus/expenses/view/widgets/subscription_sheet.dart';
+import 'package:morpheus/expenses/view/expense_search_page.dart';
 import 'package:morpheus/accounts/models/account_credential.dart';
 import 'package:morpheus/cards/models/credit_card.dart';
 import 'package:morpheus/config/app_config.dart';
@@ -44,6 +46,7 @@ class ExpenseDashboardPage extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(create: (_) => ExpenseBloc(ExpenseRepository(), baseCurrency: baseCurrency)..add(const LoadExpenses())),
+        BlocProvider(create: (_) => ExpenseClassifierCubit()),
         BlocProvider(create: (_) => CardCubit(CardRepository())..loadCards()),
         BlocProvider(create: (_) => AccountsCubit(AccountsRepository())..load()),
       ],
@@ -129,6 +132,7 @@ class _ExpenseDashboardView extends StatelessWidget {
           actions: [IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded), onPressed: () => refreshAll())],
         ),
         floatingActionButton: FloatingActionButton.extended(
+          heroTag: 'expenses_fab',
           onPressed: () => _openExpenseForm(context),
           // onPressed: () {
           //   throw StateError('This is test exception');
@@ -163,6 +167,10 @@ class _ExpenseDashboardView extends StatelessWidget {
                   _ForexBadge(rate: state.eurToInr),
                   const SizedBox(height: 12),
                   _MetricsRow(state: state),
+                  const SizedBox(height: 12),
+                  _ExpenseQuickActions(
+                    onViewAll: () => _openAllExpenses(context, state, cardState.cards, accountState.items),
+                  ),
                   const SizedBox(height: 12),
                   _SourceBreakdownCard(
                     expenses: state.expenses,
@@ -209,10 +217,15 @@ class _ExpenseDashboardView extends StatelessWidget {
                     cards: cardState.cards,
                     accounts: accountState.items,
                     categoryLabels: categoryLabels,
-                    onViewAll: () => _openAllExpenses(context, state, cardState.cards, accountState.items),
                     onEdit: (expense) => _openExpenseForm(context, existing: expense),
                     onDelete: (expense) => _confirmDeleteExpense(context, expense),
-                    onExport: () => _exportExpenses(context, state),
+                    onExport: () => _exportExpenses(
+                      context,
+                      state,
+                      cards: cardState.cards,
+                      accounts: accountState.items,
+                      categoryLabels: categoryLabels,
+                    ),
                   ),
                 ],
               ),
@@ -227,6 +240,7 @@ class _ExpenseDashboardView extends StatelessWidget {
     final cardCubit = context.read<CardCubit>();
     final accountsCubit = context.read<AccountsCubit>();
     final categoryCubit = context.read<CategoryCubit>();
+    final classifierCubit = context.read<ExpenseClassifierCubit>();
     final expenseBloc = context.read<ExpenseBloc>();
     final result = await showModalBottomSheet<Expense>(
       context: context,
@@ -235,6 +249,7 @@ class _ExpenseDashboardView extends StatelessWidget {
         providers: [
           BlocProvider.value(value: expenseBloc),
           BlocProvider.value(value: categoryCubit),
+          BlocProvider.value(value: classifierCubit),
           BlocProvider.value(value: cardCubit),
           BlocProvider.value(value: accountsCubit),
         ],
@@ -248,6 +263,7 @@ class _ExpenseDashboardView extends StatelessWidget {
       } else {
         context.read<ExpenseBloc>().add(UpdateExpense(result));
       }
+      classifierCubit.clearCache();
     }
   }
 
@@ -342,10 +358,18 @@ class _ExpenseDashboardView extends StatelessWidget {
     List<AccountCredential> accounts,
   ) async {
     final categoryCubit = context.read<CategoryCubit>();
+    final expenseBloc = context.read<ExpenseBloc>();
+    final cardCubit = context.read<CardCubit>();
+    final accountsCubit = context.read<AccountsCubit>();
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BlocProvider.value(
-          value: categoryCubit,
+        builder: (_) => MultiBlocProvider(
+          providers: [
+            BlocProvider.value(value: expenseBloc),
+            BlocProvider.value(value: cardCubit),
+            BlocProvider.value(value: accountsCubit),
+            BlocProvider.value(value: categoryCubit),
+          ],
           child: AllExpensesPage(
             expenses: state.expenses,
             displayCurrency: state.displayCurrency,
@@ -379,7 +403,13 @@ class _ExpenseDashboardView extends StatelessWidget {
     }
   }
 
-  Future<void> _exportExpenses(BuildContext context, ExpenseState state) async {
+  Future<void> _exportExpenses(
+    BuildContext context,
+    ExpenseState state, {
+    required List<CreditCard> cards,
+    required List<AccountCredential> accounts,
+    required Map<String, String> categoryLabels,
+  }) async {
     final range = await showDateRangePicker(
       context: context,
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
@@ -389,54 +419,198 @@ class _ExpenseDashboardView extends StatelessWidget {
 
     if (range == null) return;
 
+    final start = DateTime(range.start.year, range.start.month, range.start.day);
+    final end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59, 999);
+
     final filtered = state.expenses.where((e) {
-      return !e.date.isBefore(range.start) && !e.date.isAfter(range.end);
+      return !e.date.isBefore(start) && !e.date.isAfter(end);
     }).toList()..sort((a, b) => a.date.compareTo(b.date));
 
-    final buffer = StringBuffer();
-    buffer.writeln('Expenses export (${DateFormat.yMMMd().format(range.start)} - ${DateFormat.yMMMd().format(range.end)})');
-    buffer.writeln('Title,Amount,Currency,Category,Date,TransactionType,PaymentSourceType,PaymentSourceId,Note');
+    String csvField(Object? value) {
+      final text = value?.toString() ?? '';
+      final needsQuotes =
+          text.contains(',') || text.contains('"') || text.contains('\n') || text.contains('\r');
+      if (!needsQuotes) return text;
+      final escaped = text.replaceAll('"', '""');
+      return '"$escaped"';
+    }
+
+    String csvRow(List<Object?> values) => values.map(csvField).join(',');
+    String formatAmount(double? amount) => amount == null ? '' : amount.toStringAsFixed(2);
+    String formatDate(DateTime? date) => date == null ? '' : DateFormat('yyyy-MM-dd').format(date);
+
+    String categoryLabelFor(String category) => categoryLabels[category] ?? category;
+
+    String paymentSourceLabelFor(Expense expense) {
+      final type = expense.paymentSourceType.toLowerCase();
+      if (type == 'card') {
+        final card = cards.firstWhere(
+          (c) => c.id == expense.paymentSourceId,
+          orElse: () => CreditCard(
+            id: expense.paymentSourceId ?? 'card',
+            bankName: 'Card',
+            cardNumber: expense.paymentSourceId ?? '',
+            holderName: '',
+            expiryDate: '',
+            cvv: '',
+            cardColor: Colors.indigo,
+            textColor: Colors.white,
+            billingDay: 1,
+            graceDays: 15,
+            reminderEnabled: false,
+            reminderOffsets: const [],
+          ),
+        );
+        final digits = card.cardNumber.replaceAll(RegExp(r'\\D'), '');
+        final tail = digits.length >= 4 ? digits.substring(digits.length - 4) : '';
+        return '${card.bankName}${tail.isNotEmpty ? ' - $tail' : ''}';
+      }
+      if (type == 'account') {
+        final acct = accounts.firstWhere(
+          (a) => a.id == expense.paymentSourceId,
+          orElse: () => AccountCredential(
+            id: expense.paymentSourceId ?? 'account',
+            bankName: expense.paymentSourceId ?? 'Account',
+            username: '',
+            password: '',
+            lastUpdated: DateTime.now(),
+          ),
+        );
+        return acct.bankName;
+      }
+      if (type == 'wallet') {
+        final wallet = expense.paymentSourceId?.trim();
+        return wallet == null || wallet.isEmpty ? 'Wallet' : 'Wallet $wallet';
+      }
+      return 'Cash';
+    }
+
+    final expenseBuffer = StringBuffer();
+    expenseBuffer.writeln(
+      csvRow([
+        'Id',
+        'Title',
+        'Amount',
+        'Currency',
+        'Category',
+        'CategoryLabel',
+        'Date',
+        'TransactionType',
+        'PaymentSourceType',
+        'PaymentSourceLabel',
+        'PaymentSourceId',
+        'Note',
+        'BaseCurrency',
+        'AmountInBaseCurrency',
+        'BudgetCurrency',
+        'AmountInBudgetCurrency',
+      ]),
+    );
     for (final e in filtered) {
-      buffer.writeln(
-        '"${e.title.replaceAll('"', "'")}",'
-        '${e.amount.toStringAsFixed(2)},'
-        '${e.currency},'
-        '${e.category},'
-        '${DateFormat('yyyy-MM-dd').format(e.date)},'
-        '${e.transactionType},'
-        '${e.paymentSourceType},'
-        '${e.paymentSourceId ?? '-'},'
-        '"${(e.note ?? '').replaceAll('"', "'")}"',
+      expenseBuffer.writeln(
+        csvRow([
+          e.id,
+          e.title,
+          formatAmount(e.amount),
+          e.currency,
+          e.category,
+          categoryLabelFor(e.category),
+          formatDate(e.date),
+          e.transactionType,
+          e.paymentSourceType,
+          paymentSourceLabelFor(e),
+          e.paymentSourceId ?? '',
+          e.note ?? '',
+          e.baseCurrency ?? '',
+          formatAmount(e.amountInBaseCurrency),
+          e.budgetCurrency ?? '',
+          formatAmount(e.amountInBudgetCurrency),
+        ]),
       );
     }
 
-    final budget = state.activeBudget;
-    if (budget != null) {
-      buffer.writeln('');
-      buffer.writeln('Budget summary');
-      buffer.writeln('Amount (${budget.currency}),Start,End,Reserved,Usable');
-      buffer.writeln(
-        '${budget.amount.toStringAsFixed(2)},${DateFormat('yyyy-MM-dd').format(budget.startDate)},${DateFormat('yyyy-MM-dd').format(budget.endDate)},${state.reservedPlanned.toStringAsFixed(2)},${state.usableBudget.toStringAsFixed(2)}',
-      );
+    final exportService = ExportService();
+    final exports = <ExportResult>[];
+    final rangeLabel = '${DateFormat('yyyyMMdd').format(start)}_${DateFormat('yyyyMMdd').format(end)}';
+    final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final expensesFileName = 'expenses_${rangeLabel}_$stamp.csv';
 
-      if (budget.plannedExpenses.isNotEmpty) {
-        buffer.writeln('');
-        buffer.writeln('Future expenses');
-        buffer.writeln('Title,Amount,Due,Category');
-        for (final p in budget.plannedExpenses) {
-          buffer.writeln(
-            '"${p.title.replaceAll('"', "'")}",${p.amount.toStringAsFixed(2)},${DateFormat('yyyy-MM-dd').format(p.dueDate)},${p.category ?? '-'}',
+    try {
+      exports.add(await exportService.exportCsv(fileName: expensesFileName, contents: expenseBuffer.toString()));
+
+      final budget = state.activeBudget;
+      int plannedCount = 0;
+      if (budget != null) {
+        final budgetBuffer = StringBuffer();
+        budgetBuffer.writeln(
+          csvRow([
+            'BudgetId',
+            'Amount',
+            'Currency',
+            'StartDate',
+            'EndDate',
+            'Reserved',
+            'Usable',
+          ]),
+        );
+        budgetBuffer.writeln(
+          csvRow([
+            budget.id,
+            formatAmount(budget.amount),
+            budget.currency,
+            formatDate(budget.startDate),
+            formatDate(budget.endDate),
+            formatAmount(state.reservedPlanned),
+            formatAmount(state.usableBudget),
+          ]),
+        );
+
+        final budgetFileName = 'budget_summary_${rangeLabel}_$stamp.csv';
+        exports.add(await exportService.exportCsv(fileName: budgetFileName, contents: budgetBuffer.toString()));
+
+        if (budget.plannedExpenses.isNotEmpty) {
+          plannedCount = budget.plannedExpenses.length;
+          final plannedBuffer = StringBuffer();
+          plannedBuffer.writeln(
+            csvRow([
+              'PlannedId',
+              'Title',
+              'Amount',
+              'Currency',
+              'DueDate',
+              'Category',
+              'CategoryLabel',
+            ]),
           );
+          for (final p in budget.plannedExpenses) {
+            plannedBuffer.writeln(
+              csvRow([
+                p.id,
+                p.title,
+                formatAmount(p.amount),
+                budget.currency,
+                formatDate(p.dueDate),
+                p.category ?? '',
+                p.category == null ? '' : categoryLabelFor(p.category!),
+              ]),
+            );
+          }
+
+          final plannedFileName = 'planned_expenses_${rangeLabel}_$stamp.csv';
+          exports.add(await exportService.exportCsv(fileName: plannedFileName, contents: plannedBuffer.toString()));
         }
       }
-    }
 
-    final fileName = 'expenses_${DateTime.now().millisecondsSinceEpoch}.csv';
-    try {
-      final result = await ExportService().exportCsv(fileName: fileName, contents: buffer.toString());
       if (!context.mounted) return;
-      final location = result.path ?? result.label;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Exported ${filtered.length} expenses to $location')));
+      final location = exports.first.path ?? exports.first.label;
+      final extraCount = exports.length - 1;
+      final extraLabel = extraCount > 0 ? ' (+$extraCount more file${extraCount == 1 ? '' : 's'})' : '';
+      final summary = [
+        '${filtered.length} expenses',
+        if (budget != null) 'budget summary',
+        if (plannedCount > 0) '$plannedCount planned expenses',
+      ].join(', ');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Exported $summary to $location$extraLabel')));
     } on ExportException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -1298,13 +1472,33 @@ class _BudgetCard extends StatelessWidget {
   }
 }
 
+class _ExpenseQuickActions extends StatelessWidget {
+  const _ExpenseQuickActions({required this.onViewAll});
+
+  final VoidCallback onViewAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.tonalIcon(
+            onPressed: onViewAll,
+            icon: const Icon(Icons.list_alt),
+            label: const Text('All expenses'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ExpenseList extends StatelessWidget {
   const _ExpenseList({
     required this.state,
     required this.cards,
     required this.accounts,
     required this.categoryLabels,
-    required this.onViewAll,
     required this.onEdit,
     required this.onDelete,
     required this.onExport,
@@ -1314,7 +1508,6 @@ class _ExpenseList extends StatelessWidget {
   final List<CreditCard> cards;
   final List<AccountCredential> accounts;
   final Map<String, String> categoryLabels;
-  final VoidCallback onViewAll;
   final void Function(Expense expense) onEdit;
   final void Function(Expense expense) onDelete;
   final VoidCallback onExport;
@@ -1496,22 +1689,6 @@ class _ExpenseList extends StatelessWidget {
             ),
             if (i != items.length - 1) const Divider(height: 1),
           ],
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-            child: SizedBox(
-              width: double.infinity,
-              height: 45,
-              child: FilledButton.tonalIcon(
-                onPressed: onViewAll,
-                style: FilledButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: theme.colorScheme.onPrimary,
-                ),
-                icon: const Icon(Icons.list_alt),
-                label: const Text('View all expenses'),
-              ),
-            ),
-          ),
           const SizedBox(height: 8),
         ],
       ),
@@ -1621,16 +1798,29 @@ class AllExpensesPage extends StatelessWidget {
   final List<CreditCard> cards;
   final List<AccountCredential> accounts;
 
+  void _openSearch(BuildContext context) {
+    final categoryCubit = context.read<CategoryCubit>();
+    final expenseBloc = context.read<ExpenseBloc>();
+    final cardCubit = context.read<CardCubit>();
+    final accountsCubit = context.read<AccountsCubit>();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MultiBlocProvider(
+          providers: [
+            BlocProvider.value(value: expenseBloc),
+            BlocProvider.value(value: cardCubit),
+            BlocProvider.value(value: accountsCubit),
+            BlocProvider.value(value: categoryCubit),
+          ],
+          child: const ExpenseSearchPage(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (expenses.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('All expenses')),
-        body: Center(child: Text('No expenses yet', style: theme.textTheme.titleMedium)),
-      );
-    }
-
     final byYear = <int, List<Expense>>{};
     for (final e in expenses) {
       byYear.putIfAbsent(e.date.year, () => []).add(e);
@@ -1638,20 +1828,45 @@ class AllExpensesPage extends StatelessWidget {
     final years = byYear.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('All expenses')),
+      appBar: AppBar(
+        title: const Text('All expenses'),
+        actions: [
+          IconButton(
+            tooltip: 'Search expenses',
+            icon: const Icon(Icons.search),
+            onPressed: () => _openSearch(context),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          for (final year in years)
-            _YearSection(
-              year: year,
-              expenses: byYear[year]!,
-              displayCurrency: displayCurrency,
-              budgetToEur: budgetToEur,
-              eurToInr: eurToInr,
-              cards: cards,
-              accounts: accounts,
-            ),
+          SearchBar(
+            readOnly: true,
+            onTap: () => _openSearch(context),
+            hintText: 'Search expenses',
+            leading: const Icon(Icons.search),
+            trailing: const [Icon(Icons.arrow_forward, size: 18)],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap to search with filters and query syntax.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          if (expenses.isEmpty)
+            Text('No expenses yet', style: theme.textTheme.titleMedium)
+          else
+            for (final year in years)
+              _YearSection(
+                year: year,
+                expenses: byYear[year]!,
+                displayCurrency: displayCurrency,
+                budgetToEur: budgetToEur,
+                eurToInr: eurToInr,
+                cards: cards,
+                accounts: accounts,
+              ),
         ],
       ),
     );

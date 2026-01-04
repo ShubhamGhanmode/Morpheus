@@ -129,6 +129,7 @@ class _AccountsPageState extends State<AccountsPage> with TickerProviderStateMix
             floatingActionButton: ScaleTransition(
               scale: _fabController,
               child: FloatingActionButton.extended(
+                heroTag: 'accounts_fab',
                 onPressed: _onAddAccountPressed,
                 label: const Text('Add Account'),
                 icon: const Icon(Icons.add_rounded),
