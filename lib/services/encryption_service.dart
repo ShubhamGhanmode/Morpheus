@@ -12,6 +12,7 @@ import 'package:morpheus/services/error_reporter.dart';
 class EncryptionService {
   static const String _legacyFallbackKey = 'YOUR_32_CHARACTER_LONG_KEY_HERE'; // 32 chars
   static const String _legacyFallbackIv = 'YOUR_16_CHARACTER_LONG_IV'; // 16 chars
+  static const String _cipherVersionPrefix = 'v1:';
   static const String _keyStorageKey = 'morpheus.encryption.key';
   static const String _ivStorageKey = 'morpheus.encryption.iv';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -19,6 +20,7 @@ class EncryptionService {
   static String _keyValue = _legacyFallbackKey;
   static String _ivValue = _legacyFallbackIv;
   static Encrypter? _encrypter;
+  static Encrypter? _legacyEncrypter;
   static IV? _iv;
   static bool _initialized = false;
 
@@ -69,7 +71,7 @@ class EncryptionService {
   }
 
   static void _ensureReady() {
-    if (_encrypter != null && _iv != null) return;
+    if (_encrypter != null && _iv != null && _legacyEncrypter != null) return;
     if (!_initialized) {
       debugPrint('EncryptionService used before initialize; using fallback key/iv.');
     }
@@ -78,12 +80,22 @@ class EncryptionService {
 
   static String encryptData(String data) {
     _ensureReady();
-    return _encrypter!.encrypt(data, iv: _iv!).base64;
+    final encrypted = _encrypter!.encrypt(data, iv: _iv!).base64;
+    return '$_cipherVersionPrefix$encrypted';
   }
 
   static String decryptData(String encryptedData) {
     _ensureReady();
-    return _encrypter!.decrypt64(encryptedData, iv: _iv!);
+    final raw = encryptedData.trim();
+    if (raw.startsWith(_cipherVersionPrefix)) {
+      final payload = raw.substring(_cipherVersionPrefix.length);
+      return _encrypter!.decrypt64(payload, iv: _iv!);
+    }
+    try {
+      return _legacyEncrypter!.decrypt64(raw, iv: _iv!);
+    } catch (_) {
+      return _encrypter!.decrypt64(raw, iv: _iv!);
+    }
   }
 
   static String encryptPin(String pin) {
@@ -101,12 +113,15 @@ class EncryptionService {
 
   static bool _configureCipher() {
     try {
-      _encrypter = Encrypter(AES(_keyFromStorageValue(_keyValue)));
+      final key = _keyFromStorageValue(_keyValue);
+      _encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      _legacyEncrypter = Encrypter(AES(key, mode: AESMode.sic));
       _iv = _ivFromStorageValue(_ivValue);
       return true;
     } catch (e, stack) {
       unawaited(ErrorReporter.recordError(e, stack, reason: 'Invalid encryption key/iv; reinitializing'));
-      _encrypter = Encrypter(AES(Key.fromUtf8(_legacyFallbackKey)));
+      _encrypter = Encrypter(AES(Key.fromUtf8(_legacyFallbackKey), mode: AESMode.cbc));
+      _legacyEncrypter = Encrypter(AES(Key.fromUtf8(_legacyFallbackKey), mode: AESMode.sic));
       _iv = IV.fromUtf8(_legacyFallbackIv);
       return false;
     }

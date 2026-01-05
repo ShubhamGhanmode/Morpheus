@@ -755,9 +755,9 @@ class _ReadyView extends StatelessWidget {
                   Text(fmt.format(itemTotal), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                 ],
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(8),
@@ -768,13 +768,13 @@ class _ReadyView extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              FilledButton.icon(
-                onPressed: validItemCount > 0 ? onConfirm : null,
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('Add Expenses'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: validItemCount > 0 ? onConfirm : null,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Add Expenses'),
+                  style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                 ),
               ),
             ],
@@ -812,9 +812,15 @@ class _ReceiptHeaderCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [theme.colorScheme.secondaryContainer, theme.colorScheme.primaryContainer.withValues(alpha: 0.7)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: theme.colorScheme.primary.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,44 +828,82 @@ class _ReceiptHeaderCard extends StatelessWidget {
           // Image preview row
           if (hasImage)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(state.imageBytes!, width: 60, height: 60, fit: BoxFit.cover),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.shadow.withValues(alpha: 0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.memory(state.imageBytes!, width: 72, height: 72, fit: BoxFit.cover),
+                    ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.tertiaryContainer,
-                            borderRadius: BorderRadius.circular(6),
+                            gradient: LinearGradient(
+                              colors: [
+                                theme.colorScheme.tertiaryContainer,
+                                theme.colorScheme.tertiaryContainer.withValues(alpha: 0.8),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle_outline_rounded, size: 14, color: theme.colorScheme.onTertiaryContainer),
-                              const SizedBox(width: 4),
+                              Icon(Icons.check_circle_rounded, size: 16, color: theme.colorScheme.onTertiaryContainer),
+                              const SizedBox(width: 6),
                               Text(
-                                'Scanned',
+                                'Scanned Successfully',
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: theme.colorScheme.onTertiaryContainer,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 10),
                         if (date != null)
-                          Text(
-                            DateFormat.yMMMd().format(date),
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today_rounded,
+                                size: 16,
+                                color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                DateFormat.yMMMd().format(date),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                       ],
                     ),
@@ -869,63 +913,165 @@ class _ReceiptHeaderCard extends StatelessWidget {
             ),
 
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Section label
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 18,
+                      decoration: BoxDecoration(color: theme.colorScheme.primary, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Receipt Details',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // Merchant field
-                TextFormField(
-                  controller: merchantController,
-                  decoration: InputDecoration(
-                    labelText: 'Merchant / Store Name',
-                    hintText: 'e.g., Walmart, Target',
-                    prefixIcon: const Icon(Icons.store_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  textCapitalization: TextCapitalization.words,
-                  onChanged: onMerchantChanged,
+                  child: TextFormField(
+                    controller: merchantController,
+                    decoration: InputDecoration(
+                      labelText: 'Merchant / Store Name',
+                      hintText: 'e.g., Walmart, Target',
+                      prefixIcon: Container(
+                        margin: const EdgeInsets.only(left: 12, right: 8),
+                        child: Icon(Icons.store_rounded, color: theme.colorScheme.primary),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    onChanged: onMerchantChanged,
+                  ),
                 ),
 
                 const SizedBox(height: 14),
 
                 // Currency selector
-                DropdownButtonFormField<String>(
-                  value: state.currency ?? AppConfig.supportedCurrencies.first,
-                  items: AppConfig.supportedCurrencies.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
-                  onChanged: onCurrencyChanged,
-                  decoration: InputDecoration(
-                    labelText: 'Currency',
-                    prefixIcon: const Icon(Icons.attach_money_rounded),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: DropdownButtonFormField<String>(
+                    value: state.currency ?? AppConfig.supportedCurrencies.first,
+                    items: AppConfig.supportedCurrencies.map((c) => DropdownMenuItem<String>(value: c, child: Text(c))).toList(),
+                    onChanged: onCurrencyChanged,
+                    decoration: InputDecoration(
+                      labelText: 'Currency',
+                      prefixIcon: Container(
+                        margin: const EdgeInsets.only(left: 12, right: 8),
+                        child: Icon(Icons.currency_exchange_rounded, color: theme.colorScheme.primary),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    ),
                   ),
                 ),
 
                 // Receipt totals (if available)
                 if (state.total != null || state.subtotal != null || state.tax != null) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [theme.colorScheme.surface, theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.shadow.withValues(alpha: 0.06),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
+                        Row(
+                          children: [
+                            Icon(Icons.receipt_long_rounded, size: 18, color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Receipt Summary',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
                         if (state.subtotal != null)
                           _TotalRow(label: 'Subtotal', value: fmt.format(state.subtotal!), theme: theme),
                         if (state.tax != null) ...[
-                          if (state.subtotal != null) const SizedBox(height: 6),
+                          if (state.subtotal != null) const SizedBox(height: 10),
                           _TotalRow(label: 'Tax', value: fmt.format(state.tax!), theme: theme),
                         ],
                         if (state.total != null) ...[
                           if (state.subtotal != null || state.tax != null)
                             Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Divider(color: theme.colorScheme.outlineVariant, height: 1),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Container(
+                                height: 1,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [Colors.transparent, theme.colorScheme.outlineVariant, Colors.transparent],
+                                  ),
+                                ),
+                              ),
                             ),
-                          _TotalRow(label: 'Total (from receipt)', value: fmt.format(state.total!), theme: theme, isBold: true),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: _TotalRow(
+                              label: 'Total (from receipt)',
+                              value: fmt.format(state.total!),
+                              theme: theme,
+                              isBold: true,
+                            ),
+                          ),
                         ],
                       ],
                     ),
@@ -1034,9 +1180,7 @@ class _EnhancedItemCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    emoji.isNotEmpty
-                        ? '$emoji ${categoryMap[resolvedCategory] ?? 'Category'}'
-                        : categoryMap[resolvedCategory] ?? 'Category',
+                    categoryMap[resolvedCategory] ?? 'Category',
                     style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
@@ -1060,14 +1204,14 @@ class _EnhancedItemCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      flex: 3,
+                      flex: 4,
                       child: TextFormField(
                         key: ValueKey('${item.id}-name'),
                         initialValue: item.name,
                         decoration: InputDecoration(
                           labelText: 'Item name',
                           hintText: 'e.g., Coffee',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(50)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         ),
                         onChanged: onNameChanged,
@@ -1102,12 +1246,7 @@ class _EnhancedItemCard extends StatelessWidget {
                       .map(
                         (c) => DropdownMenuItem<String>(
                           value: c.name,
-                          child: Row(
-                            children: [
-                              if (c.emoji.isNotEmpty) ...[Text(c.emoji), const SizedBox(width: 8)],
-                              Text(c.label),
-                            ],
-                          ),
+                          child: Row(children: [Text(c.label)]),
                         ),
                       )
                       .toList(),
@@ -1130,9 +1269,7 @@ class _EnhancedItemCard extends StatelessWidget {
                     children: suggestions.map((suggestion) {
                       final isSelected = suggestion == selectedCategory;
                       final suggestionEmoji = categoryEmojis[suggestion] ?? '';
-                      final label = suggestionEmoji.isNotEmpty
-                          ? '$suggestionEmoji ${categoryMap[suggestion] ?? suggestion}'
-                          : categoryMap[suggestion] ?? suggestion;
+                      final label = categoryMap[suggestion] ?? suggestion;
                       return InkWell(
                         onTap: () => onCategoryChanged(suggestion),
                         borderRadius: BorderRadius.circular(8),
@@ -1162,4 +1299,15 @@ class _EnhancedItemCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String removeEmojis(String input) {
+  final emojiRegex = RegExp(
+    r'[\u{1F300}-\u{1FAFF}'
+    r'\u{2600}-\u{27BF}'
+    r'\u{1F1E6}-\u{1F1FF}]',
+    unicode: true,
+  );
+
+  return input.replaceAll(emojiRegex, '');
 }

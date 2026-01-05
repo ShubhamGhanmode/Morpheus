@@ -297,7 +297,7 @@ class _YearSection extends StatelessWidget {
             ),
           ],
           const SizedBox(width: 4),
-          Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(removeEmojis(label), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -1453,9 +1453,9 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
             children: [
               if (topCategory != null)
                 Expanded(
-                  child: _buildQuickStatCardEmoji(
+                  child: _buildQuickStatCard(
                     theme,
-                    topCategoryEmoji,
+                    Icons.keyboard_double_arrow_up,
                     _categoryLabelFromContext(context, topCategory.key),
                     'Top category',
                     theme.colorScheme.tertiaryContainer,
@@ -1571,7 +1571,7 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: theme.colorScheme.onSurface.withOpacity(0.7)),
+              Icon(icon, size: 28, color: theme.colorScheme.onSurface.withOpacity(0.7)),
               const Spacer(),
             ],
           ),
@@ -1598,11 +1598,11 @@ class _ExpenseAnalyticsPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 18)),
+              Text(emoji, style: TextStyle(fontSize: 24, color: Colors.black.withOpacity(0.6))),
               const Spacer(),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
             style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -2120,6 +2120,17 @@ String _categoryLabel(String name, Map<String, String> labels) {
 String _categoryLabelFromContext(BuildContext context, String name) {
   final labels = {for (final c in context.watch<CategoryCubit>().state.items) c.name: c.label};
   return _categoryLabel(name, labels);
+}
+
+String removeEmojis(String input) {
+  final emojiRegex = RegExp(
+    r'[\u{1F300}-\u{1FAFF}'
+    r'\u{2600}-\u{27BF}'
+    r'\u{1F1E6}-\u{1F1FF}]',
+    unicode: true,
+  );
+
+  return input.replaceAll(emojiRegex, '');
 }
 
 PaymentSourceKey _sourceKeyForExpense(Expense expense) {

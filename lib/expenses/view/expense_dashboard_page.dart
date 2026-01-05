@@ -747,7 +747,7 @@ class _UsableBudgetCard extends StatelessWidget {
                         'Usable budget',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onPrimaryFixedVariant,
+                          color: isNegative ? theme.colorScheme.onPrimaryFixedVariant : theme.colorScheme.onPrimaryContainer,
                         ),
                       ),
                       if (isNegative) ...[
@@ -764,7 +764,12 @@ class _UsableBudgetCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(range, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryFixedVariant)),
+                  Text(
+                    range,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isNegative ? theme.colorScheme.onPrimaryFixedVariant : theme.colorScheme.onSecondaryContainer,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     budget == null ? '-' : fmt.format(usable.abs()),
@@ -776,7 +781,9 @@ class _UsableBudgetCard extends StatelessWidget {
                   if (budget != null && altAmount() != null && altFmt != null)
                     Text(
                       '\u2248 ${altFmt.format(altAmount()!.abs())} today',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryFixedVariant),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isNegative ? theme.colorScheme.onPrimaryFixedVariant : theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
                 ],
               ),
@@ -1982,6 +1989,8 @@ class _BudgetCard extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     visualDensity: VisualDensity.compact,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    foregroundColor: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
               ],
@@ -2268,7 +2277,7 @@ class _ExpenseQuickActions extends StatelessWidget {
             label: const Text('All expenses'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ),
@@ -2281,7 +2290,7 @@ class _ExpenseQuickActions extends StatelessWidget {
               label: const Text('Scan receipt'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),

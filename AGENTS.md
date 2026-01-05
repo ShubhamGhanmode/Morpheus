@@ -702,13 +702,5 @@ Start here if you are unsure where to change something:
 - Medium: Base currency setting not consistently honored in conversions; notification IDs derive from hashCode; Google serverClientId is hard-coded; FX HTTP client has no timeout/caching.
 - Low: Expense search numeric filters ignore negatives; expense fetch/search index is O(n) per build for large datasets.
 
-## Recent Fixes
-- Settings cubit now imports `AppConfig` so `ReceiptOcrProvider` resolves correctly.
-- Document AI parser now normalizes map keys to avoid `_Map<Object?, Object?>` cast errors.
-- Receipt scans now upload images to Storage and create grouped expenses with `groupId`.
-- Encryption now uses AES-CBC with a `v2:` prefix; server decrypts v2 (CBC) and legacy (CTR/SIC) ciphertext and avoids leaking ciphertext into notifications.
-- Monthly card snapshots now query Firestore `Timestamp` ranges for expenses.
-- FX conversion leaves `amountEur` unset when rates are unavailable instead of treating raw amounts as EUR.
-- Server-side Cloud Functions only decrypt for notifications; encryption is still client-side.
 
 
