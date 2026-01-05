@@ -27,8 +27,6 @@ final Map<String, List<String>> _ruleKeywordMap = {
     'carrefour',
     'seven eleven',
     '7 eleven',
-  ],
-  'Vegetables': [
     'tomato',
     'potato',
     'onion',
@@ -53,8 +51,6 @@ final Map<String, List<String>> _ruleKeywordMap = {
     'corn',
     'sweetcorn',
     'beetroot',
-  ],
-  'Fruits': [
     'apple',
     'banana',
     'orange',
@@ -74,8 +70,6 @@ final Map<String, List<String>> _ruleKeywordMap = {
     'peach',
     'plum',
     'pomegranate',
-  ],
-  'Milk': [
     'milk',
     'dairy',
     'yogurt',

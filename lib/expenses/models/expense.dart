@@ -18,6 +18,7 @@ abstract class Expense with _$Expense {
     required String category,
     @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)
     required DateTime date,
+    String? groupId,
     String? note,
     double? amountEur,
     String? baseCurrency,
@@ -40,6 +41,7 @@ abstract class Expense with _$Expense {
     required String currency,
     required String category,
     required DateTime date,
+    String? groupId,
     String? note,
     double? amountEur,
     String? baseCurrency,
@@ -59,6 +61,7 @@ abstract class Expense with _$Expense {
       currency: currency,
       category: category,
       date: date,
+      groupId: groupId,
       note: note,
       amountEur: amountEur,
       baseCurrency: baseCurrency,

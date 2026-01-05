@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:morpheus/expenses/models/budget.dart';
 import 'package:morpheus/expenses/models/expense.dart';
+import 'package:morpheus/expenses/models/expense_group.dart';
 import 'package:morpheus/expenses/models/planned_expense.dart';
 import 'package:morpheus/expenses/models/recurring_transaction.dart';
 import 'package:morpheus/expenses/models/subscription.dart';
@@ -31,6 +32,76 @@ class ExpenseRepository {
   CollectionReference<Map<String, dynamic>> _subscriptionsRef(String uid) =>
       _firestore.collection('users').doc(uid).collection('subscriptions');
 
+  CollectionReference<Map<String, dynamic>> _groupsRef(String uid) =>
+      _firestore.collection('users').doc(uid).collection('groups');
+
+  Stream<List<ExpenseGroup>> streamGroups() {
+    final uid = _uid;
+    if (uid == null) return Stream.empty();
+    return _groupsRef(uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((doc) => ExpenseGroup.fromJson({'id': doc.id, ...doc.data()}))
+              .toList(),
+        );
+  }
+
+  Future<List<Expense>> fetchExpensesByGroup(String groupId) async {
+    final uid = _uid;
+    if (uid == null || groupId.trim().isEmpty) return [];
+    final snap = await _expensesRef(uid)
+        .where('groupId', isEqualTo: groupId)
+        .orderBy('date', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => Expense.fromJson({'id': d.id, ...d.data()}))
+        .toList();
+  }
+
+  Future<void> updateGroup(ExpenseGroup group) async {
+    final uid = _uid;
+    if (uid == null) return;
+    final data = group.toJson();
+    data.remove('id');
+    data.remove('createdAt');
+    final trimmedMerchant = group.merchant?.trim();
+    data['merchant'] =
+        trimmedMerchant == null || trimmedMerchant.isEmpty
+            ? null
+            : trimmedMerchant;
+    final trimmedImageUri = group.receiptImageUri?.trim();
+    data['receiptImageUri'] =
+        trimmedImageUri == null || trimmedImageUri.isEmpty
+            ? null
+            : trimmedImageUri;
+    await _groupsRef(uid).doc(group.id).update(data);
+  }
+
+  Future<void> deleteGroup(
+    String groupId, {
+    bool deleteExpenses = false,
+  }) async {
+    final uid = _uid;
+    if (uid == null || groupId.trim().isEmpty) return;
+    final expensesSnap =
+        await _expensesRef(uid).where('groupId', isEqualTo: groupId).get();
+    final batch = _firestore.batch();
+    for (final doc in expensesSnap.docs) {
+      if (deleteExpenses) {
+        batch.delete(doc.reference);
+      } else {
+        batch.update(
+          doc.reference,
+          {'groupId': FieldValue.delete()},
+        );
+      }
+    }
+    batch.delete(_groupsRef(uid).doc(groupId));
+    await batch.commit();
+  }
+
   Future<List<Expense>> fetchExpenses() async {
     final uid = _uid;
     if (uid == null) return [];
@@ -48,6 +119,67 @@ class ExpenseRepository {
     await _expensesRef(uid).doc(expense.id).set(expense.toJson());
   }
 
+  Future<void> addExpenses(List<Expense> expenses) async {
+    final uid = _uid;
+    if (uid == null || expenses.isEmpty) return;
+    final batch = _firestore.batch();
+    final ref = _expensesRef(uid);
+    for (final expense in expenses) {
+      batch.set(ref.doc(expense.id), expense.toJson());
+    }
+    await batch.commit();
+  }
+
+  Future<String?> addExpenseGroup({
+    required String name,
+    required List<Expense> expenses,
+    String? merchant,
+    String? receiptImageUri,
+    DateTime? receiptDate,
+  }) async {
+    final uid = _uid;
+    if (uid == null || expenses.isEmpty) return null;
+    final groupRef = _groupsRef(uid).doc();
+    final groupId = groupRef.id;
+    final groupedExpenses =
+        expenses.map((e) => e.copyWith(groupId: groupId)).toList();
+    final expenseIds = groupedExpenses.map((e) => e.id).toList();
+    final trimmedMerchant = merchant?.trim();
+    final resolvedMerchant =
+        trimmedMerchant == null || trimmedMerchant.isEmpty
+            ? null
+            : trimmedMerchant;
+    final trimmedImageUri = receiptImageUri?.trim();
+    final resolvedImageUri =
+        trimmedImageUri == null || trimmedImageUri.isEmpty
+            ? null
+            : trimmedImageUri;
+    final totalAmount =
+        groupedExpenses.fold<double>(0, (sum, e) => sum + e.amount);
+    final currency = groupedExpenses.first.currency;
+
+    final batch = _firestore.batch();
+    final ref = _expensesRef(uid);
+    for (final expense in groupedExpenses) {
+      batch.set(ref.doc(expense.id), expense.toJson());
+    }
+    batch.set(
+      groupRef,
+      {
+        'name': name,
+        'merchant': resolvedMerchant,
+        'expenseIds': expenseIds,
+        'receiptImageUri': resolvedImageUri,
+        'currency': currency,
+        'totalAmount': totalAmount,
+        if (receiptDate != null) 'receiptDate': receiptDate,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    );
+    await batch.commit();
+    return groupId;
+  }
+
   Future<void> updateExpense(Expense expense) async {
     final uid = _uid;
     if (uid == null) return;
@@ -57,7 +189,20 @@ class ExpenseRepository {
   Future<void> deleteExpense(String expenseId) async {
     final uid = _uid;
     if (uid == null) return;
-    await _expensesRef(uid).doc(expenseId).delete();
+    final expenseRef = _expensesRef(uid).doc(expenseId);
+    final snap = await expenseRef.get();
+    if (!snap.exists) return;
+    final data = snap.data();
+    final groupId = data?['groupId'] as String?;
+    final batch = _firestore.batch();
+    batch.delete(expenseRef);
+    if (groupId != null && groupId.trim().isNotEmpty) {
+      batch.update(
+        _groupsRef(uid).doc(groupId),
+        {'expenseIds': FieldValue.arrayRemove([expenseId])},
+      );
+    }
+    await batch.commit();
   }
 
   Future<List<Budget>> fetchBudgets() async {

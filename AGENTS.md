@@ -27,6 +27,7 @@ Morpheus is a Flutter finance companion with:
 - Monthly snapshots for per-card utilization summaries.
 - Optional secondary currency display (base/secondary defined in config).
 - Error reporting via Sentry and Firebase Crashlytics.
+- Receipt scanning for quick expense entry with item review/edit before saving (Document AI default, Cloud Vision optional, toggle in settings/AppConfig).
 
 ## Tech Stack
 - Flutter (Dart 3.38+), Material 3 UI.
@@ -40,6 +41,7 @@ Morpheus is a Flutter finance companion with:
 - Error reporting: `sentry_flutter` + Firebase Crashlytics.
 - Security: `flutter_secure_storage`, `local_auth`, `crypto`, `encrypt`.
 - Networking: `http` for REST calls, `connectivity_plus` for status.
+- OCR: Document AI (default) or Google Vision (optional), `image_picker` for capture.
 
 ## Directory Structure
 ```
@@ -171,9 +173,11 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 
 **Expenses Module**
 - Expenses dashboard: `lib/expenses/view/expense_dashboard_page.dart`
+- All expenses list: `lib/expenses/view/all_expenses_page.dart`
 - Expense search page: `lib/expenses/view/expense_search_page.dart`
 - Expense form: `lib/expenses/view/widgets/expense_form_sheet.dart`
 - Planned expenses: `lib/expenses/view/widgets/planned_expense_sheet.dart`
+- Receipt scan page: `lib/expenses/view/receipt_scan_page.dart`
 - Expense Bloc: `lib/expenses/bloc/expense_bloc.dart`
 - Expense models: `lib/expenses/models/` (expense, budget, subscription, planned_expense)
 
@@ -200,6 +204,9 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 - Error reporting: `lib/services/error_reporter.dart`
 - Export: `lib/services/export_service.dart`
 - Category classifier: `lib/expenses/services/expense_classifier_service.dart`
+- Receipt scan service: `lib/expenses/services/receipt_scan_service.dart`
+- Receipt scan cubit: `lib/expenses/receipt_scan_cubit.dart`
+- Document AI client: `lib/expenses/services/document_ai_receipt_client.dart`
 
 **ML/AI**
 - Classifier cubit: `lib/expenses/expense_classifier_cubit.dart`
@@ -216,6 +223,7 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 
 **Backend**
 - Cloud Functions: `functions/index.js`
+- Receipt parser: `functions/receipt_parser.js`
 
 ## Decision Tree for Common Tasks
 
@@ -255,6 +263,18 @@ Modifying currency logic?
 Fixing a platform-specific bug?
   -> Check for _io.dart / _web.dart variants
   -> Use conditional imports in the barrel file
+
+Adding receipt scanning?
+  -> Add OCR capture flow (camera/gallery) + text recognition service
+  -> Gate UI and service calls with `AppConfig.enableReceiptScanning`
+  -> Parse into line items + totals; build `ReceiptLineItem` model
+  -> Parse receipt date, show image preview, and offer retry on failures
+  -> Suggest categories from classifier; review/edit UI; confirm -> batch add expenses via ExpenseRepository
+  -> Default OCR is Document AI (Cloud Functions); Vision is available via Cloud Functions
+  -> Keep provider toggle in settings; configure Document AI in Functions params
+  -> Receipt scan uploads the image to Storage `users/{uid}/receipt_scans/` and stores receipt metadata (`receiptImageUri`, `currency`, `totalAmount`, `receiptDate`) on the group doc
+  -> Alternatives: Cloud Vision (cheaper, text-only) and AWS Textract AnalyzeExpense (structured, cross-cloud overhead)
+  -> Provide _web.dart stub or disable on web
 ```
 
 ## Core Data Model (Firestore)
@@ -264,6 +284,7 @@ User-scoped documents:
   - reminders: reminderEnabled, reminderOffsets, billingDay, graceDays
 - `users/{uid}/accounts/{accountId}` (encrypted fields)
 - `users/{uid}/expenses/{expenseId}`
+- `users/{uid}/groups/{groupId}` with fields: name, merchant, expenseIds[], receiptImageUri, currency, totalAmount, receiptDate, createdAt
 - `users/{uid}/expense_categories/{categoryId}` with fields: name, emoji
 - `users/{uid}/expense_category_model/meta` with subcollections: tokens (per token counts) and ledger (per expense training snapshot)
 - `users/{uid}/budgets/{budgetId}` with fields: name, amount, currency, categoryId, period
@@ -279,6 +300,7 @@ User-scoped documents:
 ## Freezed Models Reference
 Key models using `@freezed`:
 - `Expense` - core expense with currency conversion fields
+- `ExpenseGroup` - receipt-level grouping metadata for scanned expenses
 - `Budget` - spending limits per category/period
 - `PlannedExpense` - future scheduled expenses
 - `Subscription` - recurring subscriptions
@@ -307,6 +329,8 @@ dart run build_runner build --delete-conflicting-outputs
 
 ## Expense and Ledger Semantics
 - Expense fields include: amount, currency, category, date, note.
+- groupId links expenses created from the same receipt to `users/{uid}/groups/{groupId}`.
+- Group docs store receipt-level metadata (receiptImageUri, receiptDate, totals).
 - Conversion fields: amountEur, baseCurrency, baseRate, amountInBaseCurrency,
   budgetCurrency, budgetRate, amountInBudgetCurrency.
 - paymentSourceType: cash | card | account | wallet.
@@ -377,6 +401,9 @@ Typical write flow:
 - Default categories seeded from `lib/config/app_config.dart`.
 - Emoji is optional but stored as empty string, not null.
 - UI shows categories as "emoji + space + name".
+- Default seed list is consolidated; produce/dairy live under Groceries.
+- Rule-based suggestions map produce/dairy keywords into Groceries.
+- If emoji is missing or placeholder (question marks/replacement), the UI falls back to the default emoji by category name.
 
 ## ML Category Classifier
 The app uses a **Naive Bayes text classifier** to predict expense categories.
@@ -473,6 +500,10 @@ Weight = TF * IDF
   - baseCurrency
   - secondaryCurrency
   - enableSecondaryCurrency
+  - enableReceiptScanning
+  - defaultReceiptOcrProvider
+  - Document AI params live in Cloud Functions: DOC_AI_PROJECT_ID, DOC_AI_LOCATION,
+    DOC_AI_PROCESSOR_ID, optional DOC_AI_ENDPOINT
 - Settings has a base currency toggle which is commented out for now; currently only affects some UI/flows.
   Consider consolidating to a single source of truth if you extend currency logic.
 
@@ -496,6 +527,8 @@ Region: `europe-west1`
 - syncExpenseCategoryModel: Firestore onWrite trigger for expenses -> updates category classifier.
 - sendCardReminderTask: HTTP handler invoked by Cloud Tasks.
 - sendTestPush: Callable function for UI test button.
+- scanReceipt: Callable function for receipt OCR using Google Vision.
+- scanReceiptDocumentAi: Callable function for receipt OCR using Document AI.
 - predictExpenseCategory: Callable function for category predictions.
 - computeMonthlyCardSnapshots: monthly server-side summary.
 
@@ -543,11 +576,15 @@ From `functions/`:
 - `npm install`
 - `firebase deploy --only functions`
 
+Repo hygiene (Functions):
+- `functions/node_modules/` is ignored; never commit it. Commit `functions/package.json` and `functions/package-lock.json` only.
+- If `functions/node_modules/` shows up in `git status`, it was likely tracked already; use `git rm -r --cached functions/node_modules` and commit the removal.
+
 If Cloud Tasks queue is missing:
 - `gcloud tasks queues create card-reminders --location=europe-west1`
 
 ## Required Firebase APIs
-- Cloud Functions, Cloud Run, Eventarc, Cloud Tasks, Cloud Scheduler, Pub/Sub
+- Cloud Functions, Cloud Run, Eventarc, Cloud Tasks, Cloud Scheduler, Pub/Sub, Vision API, Document AI API
 
 ## Testing and QA
 
@@ -573,6 +610,7 @@ flutter test integration_test/         # Integration tests
 - Monthly snapshot writes in Firestore (runs on 1st each month).
 - Expense add/edit with each payment source and category.
 - Expense search: query syntax, quick filters, and result list behavior.
+- Receipt scan: preview image, parse date, per-item categories, retry works, confirm adds expenses with group + receiptImageUri + totals.
 - Export: pick a date range and verify expenses, budget summary, and planned expenses CSVs open cleanly.
 - Account ledger reflects expenses and credits correctly.
 - Currency conversion shows base and secondary values consistently.
@@ -594,6 +632,8 @@ flutter test integration_test/         # Integration tests
 - Provider scope issues when opening sheets/routes (ensure required cubits are in scope).
 - Forgetting to run `build_runner` after Freezed model changes.
 - Web platform: some services have stub implementations (_web.dart).
+- Receipt scan: ensure `AppConfig.enableReceiptScanning` is true, Functions are deployed,
+  and Vision/Document AI APIs + DOC_AI_* params are configured.
 - SQLite not available on web: use conditional imports.
 - Sentry/Crashlytics: ensure DSN and config are set for production.
 - DateTime timezone: use `flutter_timezone` for user's local zone.
@@ -633,6 +673,7 @@ Start here if you are unsure where to change something:
 - **Card ledger**: `lib/cards/card_ledger_page.dart`
 - **Accounts**: `lib/accounts.dart`
 - **Expenses**: `lib/expenses/view/expense_dashboard_page.dart`
+- **All expenses list**: `lib/expenses/view/all_expenses_page.dart`
 - **Bills calendar**: `lib/bills_calendar_page.dart`
 - **Categories**: `lib/categories/category_cubit.dart`
 - **Auth flow**: `lib/auth/auth_bloc.dart`
@@ -654,3 +695,20 @@ Start here if you are unsure where to change something:
 - Private constructor for Freezed helpers: `const ClassName._();`
 - Repository methods: `Future<T>` for writes, `Stream<List<T>>` for reads
 - Error handling: emit error state with user message, log full details
+
+## Agent Review Notes
+- Latest review rating: 7/10.
+- High risk: Client/server encryption mode mismatch breaks card reminder bank names; monthly card snapshot query uses millis vs Firestore Timestamp; FX fallback stores unconverted amounts on fetch failures.
+- Medium: Base currency setting not consistently honored in conversions; notification IDs derive from hashCode; Google serverClientId is hard-coded; FX HTTP client has no timeout/caching.
+- Low: Expense search numeric filters ignore negatives; expense fetch/search index is O(n) per build for large datasets.
+
+## Recent Fixes
+- Settings cubit now imports `AppConfig` so `ReceiptOcrProvider` resolves correctly.
+- Document AI parser now normalizes map keys to avoid `_Map<Object?, Object?>` cast errors.
+- Receipt scans now upload images to Storage and create grouped expenses with `groupId`.
+- Encryption now uses AES-CBC with a `v2:` prefix; server decrypts v2 (CBC) and legacy (CTR/SIC) ciphertext and avoids leaking ciphertext into notifications.
+- Monthly card snapshots now query Firestore `Timestamp` ranges for expenses.
+- FX conversion leaves `amountEur` unset when rates are unavailable instead of treating raw amounts as EUR.
+- Server-side Cloud Functions only decrypt for notifications; encryption is still client-side.
+
+

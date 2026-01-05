@@ -11,6 +11,9 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { CloudTasksClient } = require("@google-cloud/tasks");
 const { DateTime } = require("luxon");
 const crypto = require("crypto");
+const vision = require("@google-cloud/vision");
+const { parseReceiptText } = require("./receipt_parser");
+const { processDocumentAi } = require("./document_ai_client");
 
 admin.initializeApp();
 
@@ -32,6 +35,14 @@ const cardEncryptionKey = defineString("CARD_ENCRYPTION_KEY", {
 const cardEncryptionIv = defineString("CARD_ENCRYPTION_IV", {
   default: DEFAULT_IV,
 });
+const docAiProjectId = defineString("DOC_AI_PROJECT_ID", { default: "" });
+const docAiLocation = defineString("DOC_AI_LOCATION", { default: "eu" });
+const docAiProcessorId = defineString("DOC_AI_PROCESSOR_ID", { default: "" });
+const docAiEndpoint = defineString("DOC_AI_ENDPOINT", { default: "" });
+const docAiSkipHumanReview = defineString("DOC_AI_SKIP_HUMAN_REVIEW", {
+  default: "true",
+});
+const CIPHER_VERSION_PREFIX = "v2:";
 
 const MAX_TOKENS_PER_BATCH = 500;
 const CLASSIFIER_MODEL_COLLECTION = "expense_category_model";
@@ -232,12 +243,155 @@ function stemToken(token) {
 // ============================================================================
 
 const tasksClient = new CloudTasksClient();
+const visionClient = new vision.ImageAnnotatorClient();
 let queueReady = null;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function extensionForMime(mimeType) {
+  const normalized = (mimeType || "").split(";")[0].trim().toLowerCase();
+  switch (normalized) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/heic":
+      return "heic";
+    case "image/heif":
+      return "heif";
+    default: {
+      if (normalized.includes("/")) {
+        const ext = normalized.split("/")[1];
+        return ext || "bin";
+      }
+      return "bin";
+    }
+  }
+}
+
+function createReceiptScanId() {
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : db.collection("users").doc().id;
+}
+
+async function uploadReceiptScanImage({ uid, imageBuffer, mimeType }) {
+  const bucket = admin.storage().bucket();
+  const extension = extensionForMime(mimeType);
+  const scanId = createReceiptScanId();
+  const imagePath = `users/${uid}/receipt_scans/${scanId}.${extension}`;
+  const imageFile = bucket.file(imagePath);
+
+  try {
+    await imageFile.save(imageBuffer, {
+      resumable: false,
+      metadata: { contentType: mimeType },
+    });
+    return {
+      imagePath,
+      imageUri: `gs://${bucket.name}/${imagePath}`,
+      imageBucket: bucket.name,
+    };
+  } catch (error) {
+    logger.error("Receipt image upload failed", { error });
+    return {
+      imagePath: null,
+      imageUri: null,
+      imageBucket: bucket.name,
+      imageUploadError: error?.message || String(error),
+    };
+  }
+}
+
+async function storeReceiptScanEvaluation({
+  uid,
+  imageBuffer,
+  mimeType,
+  response,
+  provider,
+  config,
+  skipHumanReview,
+}) {
+  const scansRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("receiptScanEvaluations")
+    .doc();
+  const scanId = scansRef.id;
+  const bucket = admin.storage().bucket();
+  const extension = extensionForMime(mimeType);
+  const imagePath = `users/${uid}/receipt_scans/${scanId}.${extension}`;
+  const imageFile = bucket.file(imagePath);
+  let imageUri = null;
+  let imageUploadError = null;
+
+  try {
+    await imageFile.save(imageBuffer, {
+      resumable: false,
+      metadata: { contentType: mimeType },
+    });
+    imageUri = `gs://${bucket.name}/${imagePath}`;
+  } catch (error) {
+    imageUploadError = error?.message || String(error);
+  }
+
+  const responseJson = JSON.stringify(response ?? {});
+  const responseData = JSON.parse(responseJson);
+  const responseSizeBytes = Buffer.byteLength(responseJson, "utf8");
+
+  await scansRef.set({
+    scanId,
+    provider,
+    mimeType,
+    imagePath: imageUri ? imagePath : null,
+    imageUri,
+    imageBucket: bucket.name,
+    imageUploadError,
+    response: responseData,
+    responseSizeBytes,
+    skipHumanReview,
+    processor: {
+      projectId: config.projectId,
+      location: config.location,
+      processorId: config.processorId,
+      endpoint: config.endpoint || null,
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+  return fallback;
+}
+
+function resolveDocumentAiConfig() {
+  const resolvedProjectId = docAiProjectId.value() || projectId;
+  const resolvedLocation = docAiLocation.value();
+  const resolvedProcessorId = docAiProcessorId.value();
+  const resolvedEndpoint = docAiEndpoint.value();
+  if (!resolvedProjectId || !resolvedLocation || !resolvedProcessorId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Document AI configuration is missing."
+    );
+  }
+  return {
+    projectId: resolvedProjectId,
+    location: resolvedLocation,
+    processorId: resolvedProcessorId,
+    endpoint: resolvedEndpoint,
+  };
+}
 
 function parseOffsets(raw) {
   if (Array.isArray(raw)) {
@@ -512,22 +666,77 @@ function amountForCurrency(expense, target) {
 }
 
 
-function decryptMaybe(value) {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
+function isLikelyBase64(value) {
+  return /^[A-Za-z0-9+/=]+$/.test(value);
+}
+
+function stripDataUrlPrefix(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("data:")) return trimmed;
+  const marker = "base64,";
+  const index = trimmed.indexOf(marker);
+  return index >= 0 ? trimmed.slice(index + marker.length) : trimmed;
+}
+
+function stripPkcs7(buffer) {
+  if (!buffer || buffer.length === 0) return buffer;
+  const pad = buffer[buffer.length - 1];
+  if (pad <= 0 || pad > 16) return buffer;
+  for (let i = buffer.length - pad; i < buffer.length; i += 1) {
+    if (buffer[i] !== pad) return buffer;
   }
+  return buffer.slice(0, buffer.length - pad);
+}
+
+function decryptWithCbc(payload) {
   try {
     const decipher = crypto.createDecipheriv(
       "aes-256-cbc",
       Buffer.from(cardEncryptionKey.value(), "utf8"),
       Buffer.from(cardEncryptionIv.value(), "utf8")
     );
-    let out = decipher.update(value, "base64", "utf8");
+    let out = decipher.update(payload, "base64", "utf8");
     out += decipher.final("utf8");
     return out;
   } catch (_) {
-    return value;
+    return null;
   }
+}
+
+function decryptWithCtr(payload) {
+  try {
+    const decipher = crypto.createDecipheriv(
+      "aes-256-ctr",
+      Buffer.from(cardEncryptionKey.value(), "utf8"),
+      Buffer.from(cardEncryptionIv.value(), "utf8")
+    );
+    const bytes = Buffer.concat([
+      decipher.update(payload, "base64"),
+      decipher.final(),
+    ]);
+    return stripPkcs7(bytes).toString("utf8");
+  } catch (_) {
+    return null;
+  }
+}
+
+function decryptMaybe(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  const trimmed = value.trim();
+  const isVersioned = trimmed.startsWith(CIPHER_VERSION_PREFIX);
+  const payload = isVersioned
+    ? trimmed.slice(CIPHER_VERSION_PREFIX.length)
+    : trimmed;
+  if (!isLikelyBase64(payload)) {
+    return trimmed;
+  }
+  if (isVersioned) {
+    return decryptWithCbc(payload);
+  }
+  return decryptWithCtr(payload) ?? decryptWithCbc(payload);
 }
 
 function normalizeTitle(value) {
@@ -1244,6 +1453,155 @@ exports.sendCardReminderTask = onRequest(
   }
 );
 
+exports.scanReceipt = onCall(
+  { region: REGION, timeoutSeconds: 120, memory: "1GiB" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const rawBase64 =
+      typeof request.data?.imageBase64 === "string"
+        ? request.data.imageBase64
+        : "";
+    const base64 = stripDataUrlPrefix(rawBase64);
+    if (!base64) {
+      throw new HttpsError("invalid-argument", "Missing receipt image.");
+    }
+    if (!isLikelyBase64(base64)) {
+      throw new HttpsError("invalid-argument", "Invalid receipt image data.");
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    const maxBytes = 4 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      throw new HttpsError("invalid-argument", "Receipt image is too large.");
+    }
+
+    let annotation = null;
+    try {
+      const [result] = await visionClient.documentTextDetection({
+        image: { content: buffer },
+      });
+      annotation = result?.fullTextAnnotation ?? null;
+    } catch (error) {
+      logger.error("Vision OCR failed", { error });
+      throw new HttpsError("internal", "Vision OCR failed.");
+    }
+
+    const mimeType =
+      typeof request.data?.mimeType === "string" &&
+      request.data.mimeType.trim().length > 0
+        ? request.data.mimeType.trim()
+        : "image/jpeg";
+
+    const text = annotation?.text ?? "";
+    if (!text) {
+      const scanMeta = await uploadReceiptScanImage({
+        uid: request.auth.uid,
+        imageBuffer: buffer,
+        mimeType,
+      });
+      return {
+        items: [],
+        total: null,
+        subtotal: null,
+        tax: null,
+        currency: null,
+        merchant: null,
+        rawText: "",
+        scanMeta,
+      };
+    }
+
+    const parsed = parseReceiptText(text);
+    const scanMeta = await uploadReceiptScanImage({
+      uid: request.auth.uid,
+      imageBuffer: buffer,
+      mimeType,
+    });
+    return { ...parsed, rawText: text, scanMeta };
+  }
+);
+
+exports.scanReceiptDocumentAi = onCall(
+  { region: REGION, timeoutSeconds: 120, memory: "1GiB" },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const rawBase64 =
+      typeof request.data?.imageBase64 === "string"
+        ? request.data.imageBase64
+        : "";
+    const base64 = stripDataUrlPrefix(rawBase64);
+    if (!base64) {
+      throw new HttpsError("invalid-argument", "Missing receipt image.");
+    }
+    if (!isLikelyBase64(base64)) {
+      throw new HttpsError("invalid-argument", "Invalid receipt image data.");
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    const maxBytes = 4 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      throw new HttpsError("invalid-argument", "Receipt image is too large.");
+    }
+
+    const mimeType =
+      typeof request.data?.mimeType === "string" &&
+      request.data.mimeType.trim().length > 0
+        ? request.data.mimeType.trim()
+        : "image/jpeg";
+
+    const config = resolveDocumentAiConfig();
+    const skipHumanReview = parseBoolean(docAiSkipHumanReview.value(), true);
+
+    try {
+      const result = await processDocumentAi({
+        content: base64,
+        mimeType,
+        projectId: config.projectId,
+        location: config.location,
+        processorId: config.processorId,
+        endpoint: config.endpoint,
+        skipHumanReview,
+      });
+
+      if (!result || typeof result !== "object") {
+        throw new Error("Document AI response is invalid.");
+      }
+
+      const scanMeta = await uploadReceiptScanImage({
+        uid: request.auth.uid,
+        imageBuffer: buffer,
+        mimeType,
+      });
+
+      // Evaluation logging disabled for now.
+      // try {
+      //   await storeReceiptScanEvaluation({
+      //     uid: request.auth.uid,
+      //     imageBuffer: buffer,
+      //     mimeType,
+      //     response: result,
+      //     provider: "document_ai",
+      //     config,
+      //     skipHumanReview,
+      //   });
+      // } catch (error) {
+      //   logger.error("Document AI scan logging failed", { error });
+      // }
+
+      return { ...result, scanMeta };
+    } catch (error) {
+      logger.error("Document AI OCR failed", { error });
+      throw new HttpsError("internal", "Document AI OCR failed.");
+    }
+  }
+);
+
 exports.predictExpenseCategory = onCall({ region: REGION }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Authentication required.");
@@ -1519,6 +1877,8 @@ exports.computeMonthlyCardSnapshots = onSchedule(
       const monthEnd = monthStart.plus({ months: 1 });
       const startMs = monthStart.toMillis();
       const endMs = monthEnd.toMillis();
+      const startTs = admin.firestore.Timestamp.fromMillis(startMs);
+      const endTs = admin.firestore.Timestamp.fromMillis(endMs);
 
       const cardsById = new Map();
       cards.forEach((card) => {
@@ -1529,8 +1889,8 @@ exports.computeMonthlyCardSnapshots = onSchedule(
         .collection("users")
         .doc(uid)
         .collection("expenses")
-        .where("date", ">=", startMs)
-        .where("date", "<", endMs)
+        .where("date", ">=", startTs)
+        .where("date", "<", endTs)
         .get();
 
       const displayCurrency = baseCurrency;

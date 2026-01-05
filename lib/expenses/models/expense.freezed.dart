@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Expense {
 
- String get id; String get title; double get amount; String get currency; String get category;@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime get date; String? get note; double? get amountEur; String? get baseCurrency; double? get baseRate; double? get amountInBaseCurrency; String? get budgetCurrency; double? get budgetRate; double? get amountInBudgetCurrency;@JsonKey(fromJson: _paymentSourceFromJson) String get paymentSourceType; String? get paymentSourceId; String get transactionType;
+ String get id; String get title; double get amount; String get currency; String get category;@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime get date; String? get groupId; String? get note; double? get amountEur; String? get baseCurrency; double? get baseRate; double? get amountInBaseCurrency; String? get budgetCurrency; double? get budgetRate; double? get amountInBudgetCurrency;@JsonKey(fromJson: _paymentSourceFromJson) String get paymentSourceType; String? get paymentSourceId; String get transactionType;
 /// Create a copy of Expense
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $ExpenseCopyWith<Expense> get copyWith => _$ExpenseCopyWithImpl<Expense>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Expense&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.category, category) || other.category == category)&&(identical(other.date, date) || other.date == date)&&(identical(other.note, note) || other.note == note)&&(identical(other.amountEur, amountEur) || other.amountEur == amountEur)&&(identical(other.baseCurrency, baseCurrency) || other.baseCurrency == baseCurrency)&&(identical(other.baseRate, baseRate) || other.baseRate == baseRate)&&(identical(other.amountInBaseCurrency, amountInBaseCurrency) || other.amountInBaseCurrency == amountInBaseCurrency)&&(identical(other.budgetCurrency, budgetCurrency) || other.budgetCurrency == budgetCurrency)&&(identical(other.budgetRate, budgetRate) || other.budgetRate == budgetRate)&&(identical(other.amountInBudgetCurrency, amountInBudgetCurrency) || other.amountInBudgetCurrency == amountInBudgetCurrency)&&(identical(other.paymentSourceType, paymentSourceType) || other.paymentSourceType == paymentSourceType)&&(identical(other.paymentSourceId, paymentSourceId) || other.paymentSourceId == paymentSourceId)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Expense&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.category, category) || other.category == category)&&(identical(other.date, date) || other.date == date)&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.note, note) || other.note == note)&&(identical(other.amountEur, amountEur) || other.amountEur == amountEur)&&(identical(other.baseCurrency, baseCurrency) || other.baseCurrency == baseCurrency)&&(identical(other.baseRate, baseRate) || other.baseRate == baseRate)&&(identical(other.amountInBaseCurrency, amountInBaseCurrency) || other.amountInBaseCurrency == amountInBaseCurrency)&&(identical(other.budgetCurrency, budgetCurrency) || other.budgetCurrency == budgetCurrency)&&(identical(other.budgetRate, budgetRate) || other.budgetRate == budgetRate)&&(identical(other.amountInBudgetCurrency, amountInBudgetCurrency) || other.amountInBudgetCurrency == amountInBudgetCurrency)&&(identical(other.paymentSourceType, paymentSourceType) || other.paymentSourceType == paymentSourceType)&&(identical(other.paymentSourceId, paymentSourceId) || other.paymentSourceId == paymentSourceId)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,amount,currency,category,date,note,amountEur,baseCurrency,baseRate,amountInBaseCurrency,budgetCurrency,budgetRate,amountInBudgetCurrency,paymentSourceType,paymentSourceId,transactionType);
+int get hashCode => Object.hash(runtimeType,id,title,amount,currency,category,date,groupId,note,amountEur,baseCurrency,baseRate,amountInBaseCurrency,budgetCurrency,budgetRate,amountInBudgetCurrency,paymentSourceType,paymentSourceId,transactionType);
 
 @override
 String toString() {
-  return 'Expense(id: $id, title: $title, amount: $amount, currency: $currency, category: $category, date: $date, note: $note, amountEur: $amountEur, baseCurrency: $baseCurrency, baseRate: $baseRate, amountInBaseCurrency: $amountInBaseCurrency, budgetCurrency: $budgetCurrency, budgetRate: $budgetRate, amountInBudgetCurrency: $amountInBudgetCurrency, paymentSourceType: $paymentSourceType, paymentSourceId: $paymentSourceId, transactionType: $transactionType)';
+  return 'Expense(id: $id, title: $title, amount: $amount, currency: $currency, category: $category, date: $date, groupId: $groupId, note: $note, amountEur: $amountEur, baseCurrency: $baseCurrency, baseRate: $baseRate, amountInBaseCurrency: $amountInBaseCurrency, budgetCurrency: $budgetCurrency, budgetRate: $budgetRate, amountInBudgetCurrency: $amountInBudgetCurrency, paymentSourceType: $paymentSourceType, paymentSourceId: $paymentSourceId, transactionType: $transactionType)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $ExpenseCopyWith<$Res>  {
   factory $ExpenseCopyWith(Expense value, $Res Function(Expense) _then) = _$ExpenseCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, double amount, String currency, String category,@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime date, String? note, double? amountEur, String? baseCurrency, double? baseRate, double? amountInBaseCurrency, String? budgetCurrency, double? budgetRate, double? amountInBudgetCurrency,@JsonKey(fromJson: _paymentSourceFromJson) String paymentSourceType, String? paymentSourceId, String transactionType
+ String id, String title, double amount, String currency, String category,@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime date, String? groupId, String? note, double? amountEur, String? baseCurrency, double? baseRate, double? amountInBaseCurrency, String? budgetCurrency, double? budgetRate, double? amountInBudgetCurrency,@JsonKey(fromJson: _paymentSourceFromJson) String paymentSourceType, String? paymentSourceId, String transactionType
 });
 
 
@@ -65,7 +65,7 @@ class _$ExpenseCopyWithImpl<$Res>
 
 /// Create a copy of Expense
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? amount = null,Object? currency = null,Object? category = null,Object? date = null,Object? note = freezed,Object? amountEur = freezed,Object? baseCurrency = freezed,Object? baseRate = freezed,Object? amountInBaseCurrency = freezed,Object? budgetCurrency = freezed,Object? budgetRate = freezed,Object? amountInBudgetCurrency = freezed,Object? paymentSourceType = null,Object? paymentSourceId = freezed,Object? transactionType = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? amount = null,Object? currency = null,Object? category = null,Object? date = null,Object? groupId = freezed,Object? note = freezed,Object? amountEur = freezed,Object? baseCurrency = freezed,Object? baseRate = freezed,Object? amountInBaseCurrency = freezed,Object? budgetCurrency = freezed,Object? budgetRate = freezed,Object? amountInBudgetCurrency = freezed,Object? paymentSourceType = null,Object? paymentSourceId = freezed,Object? transactionType = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -73,7 +73,8 @@ as String,amount: null == amount ? _self.amount : amount // ignore: cast_nullabl
 as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
 as String,date: null == date ? _self.date : date // ignore: cast_nullable_to_non_nullable
-as DateTime,note: freezed == note ? _self.note : note // ignore: cast_nullable_to_non_nullable
+as DateTime,groupId: freezed == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String?,note: freezed == note ? _self.note : note // ignore: cast_nullable_to_non_nullable
 as String?,amountEur: freezed == amountEur ? _self.amountEur : amountEur // ignore: cast_nullable_to_non_nullable
 as double?,baseCurrency: freezed == baseCurrency ? _self.baseCurrency : baseCurrency // ignore: cast_nullable_to_non_nullable
 as String?,baseRate: freezed == baseRate ? _self.baseRate : baseRate // ignore: cast_nullable_to_non_nullable
@@ -169,10 +170,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? groupId,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Expense() when $default != null:
-return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
+return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.groupId,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
   return orElse();
 
 }
@@ -190,10 +191,10 @@ return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? groupId,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)  $default,) {final _that = this;
 switch (_that) {
 case _Expense():
-return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
+return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.groupId,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -210,10 +211,10 @@ return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  double amount,  String currency,  String category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson)  DateTime date,  String? groupId,  String? note,  double? amountEur,  String? baseCurrency,  double? baseRate,  double? amountInBaseCurrency,  String? budgetCurrency,  double? budgetRate,  double? amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson)  String paymentSourceType,  String? paymentSourceId,  String transactionType)?  $default,) {final _that = this;
 switch (_that) {
 case _Expense() when $default != null:
-return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
+return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,_that.date,_that.groupId,_that.note,_that.amountEur,_that.baseCurrency,_that.baseRate,_that.amountInBaseCurrency,_that.budgetCurrency,_that.budgetRate,_that.amountInBudgetCurrency,_that.paymentSourceType,_that.paymentSourceId,_that.transactionType);case _:
   return null;
 
 }
@@ -225,7 +226,7 @@ return $default(_that.id,_that.title,_that.amount,_that.currency,_that.category,
 @JsonSerializable()
 
 class _Expense extends Expense {
-   _Expense({required this.id, required this.title, required this.amount, required this.currency, required this.category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) required this.date, this.note, this.amountEur, this.baseCurrency, this.baseRate, this.amountInBaseCurrency, this.budgetCurrency, this.budgetRate, this.amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson) this.paymentSourceType = 'cash', this.paymentSourceId, this.transactionType = 'spend'}): super._();
+   _Expense({required this.id, required this.title, required this.amount, required this.currency, required this.category, @JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) required this.date, this.groupId, this.note, this.amountEur, this.baseCurrency, this.baseRate, this.amountInBaseCurrency, this.budgetCurrency, this.budgetRate, this.amountInBudgetCurrency, @JsonKey(fromJson: _paymentSourceFromJson) this.paymentSourceType = 'cash', this.paymentSourceId, this.transactionType = 'spend'}): super._();
   factory _Expense.fromJson(Map<String, dynamic> json) => _$ExpenseFromJson(json);
 
 @override final  String id;
@@ -234,6 +235,7 @@ class _Expense extends Expense {
 @override final  String currency;
 @override final  String category;
 @override@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) final  DateTime date;
+@override final  String? groupId;
 @override final  String? note;
 @override final  double? amountEur;
 @override final  String? baseCurrency;
@@ -259,16 +261,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Expense&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.category, category) || other.category == category)&&(identical(other.date, date) || other.date == date)&&(identical(other.note, note) || other.note == note)&&(identical(other.amountEur, amountEur) || other.amountEur == amountEur)&&(identical(other.baseCurrency, baseCurrency) || other.baseCurrency == baseCurrency)&&(identical(other.baseRate, baseRate) || other.baseRate == baseRate)&&(identical(other.amountInBaseCurrency, amountInBaseCurrency) || other.amountInBaseCurrency == amountInBaseCurrency)&&(identical(other.budgetCurrency, budgetCurrency) || other.budgetCurrency == budgetCurrency)&&(identical(other.budgetRate, budgetRate) || other.budgetRate == budgetRate)&&(identical(other.amountInBudgetCurrency, amountInBudgetCurrency) || other.amountInBudgetCurrency == amountInBudgetCurrency)&&(identical(other.paymentSourceType, paymentSourceType) || other.paymentSourceType == paymentSourceType)&&(identical(other.paymentSourceId, paymentSourceId) || other.paymentSourceId == paymentSourceId)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Expense&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.category, category) || other.category == category)&&(identical(other.date, date) || other.date == date)&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.note, note) || other.note == note)&&(identical(other.amountEur, amountEur) || other.amountEur == amountEur)&&(identical(other.baseCurrency, baseCurrency) || other.baseCurrency == baseCurrency)&&(identical(other.baseRate, baseRate) || other.baseRate == baseRate)&&(identical(other.amountInBaseCurrency, amountInBaseCurrency) || other.amountInBaseCurrency == amountInBaseCurrency)&&(identical(other.budgetCurrency, budgetCurrency) || other.budgetCurrency == budgetCurrency)&&(identical(other.budgetRate, budgetRate) || other.budgetRate == budgetRate)&&(identical(other.amountInBudgetCurrency, amountInBudgetCurrency) || other.amountInBudgetCurrency == amountInBudgetCurrency)&&(identical(other.paymentSourceType, paymentSourceType) || other.paymentSourceType == paymentSourceType)&&(identical(other.paymentSourceId, paymentSourceId) || other.paymentSourceId == paymentSourceId)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,amount,currency,category,date,note,amountEur,baseCurrency,baseRate,amountInBaseCurrency,budgetCurrency,budgetRate,amountInBudgetCurrency,paymentSourceType,paymentSourceId,transactionType);
+int get hashCode => Object.hash(runtimeType,id,title,amount,currency,category,date,groupId,note,amountEur,baseCurrency,baseRate,amountInBaseCurrency,budgetCurrency,budgetRate,amountInBudgetCurrency,paymentSourceType,paymentSourceId,transactionType);
 
 @override
 String toString() {
-  return 'Expense(id: $id, title: $title, amount: $amount, currency: $currency, category: $category, date: $date, note: $note, amountEur: $amountEur, baseCurrency: $baseCurrency, baseRate: $baseRate, amountInBaseCurrency: $amountInBaseCurrency, budgetCurrency: $budgetCurrency, budgetRate: $budgetRate, amountInBudgetCurrency: $amountInBudgetCurrency, paymentSourceType: $paymentSourceType, paymentSourceId: $paymentSourceId, transactionType: $transactionType)';
+  return 'Expense(id: $id, title: $title, amount: $amount, currency: $currency, category: $category, date: $date, groupId: $groupId, note: $note, amountEur: $amountEur, baseCurrency: $baseCurrency, baseRate: $baseRate, amountInBaseCurrency: $amountInBaseCurrency, budgetCurrency: $budgetCurrency, budgetRate: $budgetRate, amountInBudgetCurrency: $amountInBudgetCurrency, paymentSourceType: $paymentSourceType, paymentSourceId: $paymentSourceId, transactionType: $transactionType)';
 }
 
 
@@ -279,7 +281,7 @@ abstract mixin class _$ExpenseCopyWith<$Res> implements $ExpenseCopyWith<$Res> {
   factory _$ExpenseCopyWith(_Expense value, $Res Function(_Expense) _then) = __$ExpenseCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, double amount, String currency, String category,@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime date, String? note, double? amountEur, String? baseCurrency, double? baseRate, double? amountInBaseCurrency, String? budgetCurrency, double? budgetRate, double? amountInBudgetCurrency,@JsonKey(fromJson: _paymentSourceFromJson) String paymentSourceType, String? paymentSourceId, String transactionType
+ String id, String title, double amount, String currency, String category,@JsonKey(fromJson: dateTimeFromJson, toJson: dateTimeToJson) DateTime date, String? groupId, String? note, double? amountEur, String? baseCurrency, double? baseRate, double? amountInBaseCurrency, String? budgetCurrency, double? budgetRate, double? amountInBudgetCurrency,@JsonKey(fromJson: _paymentSourceFromJson) String paymentSourceType, String? paymentSourceId, String transactionType
 });
 
 
@@ -296,7 +298,7 @@ class __$ExpenseCopyWithImpl<$Res>
 
 /// Create a copy of Expense
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? amount = null,Object? currency = null,Object? category = null,Object? date = null,Object? note = freezed,Object? amountEur = freezed,Object? baseCurrency = freezed,Object? baseRate = freezed,Object? amountInBaseCurrency = freezed,Object? budgetCurrency = freezed,Object? budgetRate = freezed,Object? amountInBudgetCurrency = freezed,Object? paymentSourceType = null,Object? paymentSourceId = freezed,Object? transactionType = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? amount = null,Object? currency = null,Object? category = null,Object? date = null,Object? groupId = freezed,Object? note = freezed,Object? amountEur = freezed,Object? baseCurrency = freezed,Object? baseRate = freezed,Object? amountInBaseCurrency = freezed,Object? budgetCurrency = freezed,Object? budgetRate = freezed,Object? amountInBudgetCurrency = freezed,Object? paymentSourceType = null,Object? paymentSourceId = freezed,Object? transactionType = null,}) {
   return _then(_Expense(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -304,7 +306,8 @@ as String,amount: null == amount ? _self.amount : amount // ignore: cast_nullabl
 as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
 as String,date: null == date ? _self.date : date // ignore: cast_nullable_to_non_nullable
-as DateTime,note: freezed == note ? _self.note : note // ignore: cast_nullable_to_non_nullable
+as DateTime,groupId: freezed == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String?,note: freezed == note ? _self.note : note // ignore: cast_nullable_to_non_nullable
 as String?,amountEur: freezed == amountEur ? _self.amountEur : amountEur // ignore: cast_nullable_to_non_nullable
 as double?,baseCurrency: freezed == baseCurrency ? _self.baseCurrency : baseCurrency // ignore: cast_nullable_to_non_nullable
 as String?,baseRate: freezed == baseRate ? _self.baseRate : baseRate // ignore: cast_nullable_to_non_nullable

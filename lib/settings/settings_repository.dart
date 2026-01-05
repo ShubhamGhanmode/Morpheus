@@ -11,6 +11,7 @@ class SettingsRepository {
   static const _appLockKey = 'settings.appLockEnabled';
   static const _testModeKey = 'settings.testModeEnabled';
   static const _baseCurrencyKey = 'settings.baseCurrency';
+  static const _receiptOcrProviderKey = 'settings.receiptOcrProvider';
 
   Future<SettingsState> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -20,6 +21,7 @@ class SettingsRepository {
     final appLock = prefs.getBool(_appLockKey);
     final testMode = prefs.getBool(_testModeKey);
     final baseCurrency = prefs.getString(_baseCurrencyKey);
+    final receiptOcrProvider = prefs.getString(_receiptOcrProviderKey);
 
     return SettingsState(
       themeMode: _parseThemeMode(themeName),
@@ -28,6 +30,7 @@ class SettingsRepository {
       appLockEnabled: appLock ?? false,
       testModeEnabled: testMode ?? false,
       baseCurrency: baseCurrency ?? AppConfig.baseCurrency,
+      receiptOcrProvider: _parseReceiptOcrProvider(receiptOcrProvider),
     );
   }
 
@@ -61,6 +64,11 @@ class SettingsRepository {
     await prefs.setString(_baseCurrencyKey, currency);
   }
 
+  Future<void> saveReceiptOcrProvider(ReceiptOcrProvider provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_receiptOcrProviderKey, provider.name);
+  }
+
   ThemeMode _parseThemeMode(String? value) {
     if (value == null) return ThemeMode.system;
     return ThemeMode.values.firstWhere(
@@ -74,6 +82,14 @@ class SettingsRepository {
     return AppContrast.values.firstWhere(
       (contrast) => contrast.name == value,
       orElse: () => AppContrast.normal,
+    );
+  }
+
+  ReceiptOcrProvider _parseReceiptOcrProvider(String? value) {
+    if (value == null) return AppConfig.defaultReceiptOcrProvider;
+    return ReceiptOcrProvider.values.firstWhere(
+      (provider) => provider.name == value,
+      orElse: () => AppConfig.defaultReceiptOcrProvider,
     );
   }
 }

@@ -20,6 +20,40 @@ class AddExpense extends ExpenseEvent {
   List<Object?> get props => [expense];
 }
 
+class AddExpenses extends ExpenseEvent {
+  const AddExpenses(this.expenses);
+
+  final List<Expense> expenses;
+
+  @override
+  List<Object?> get props => [expenses];
+}
+
+class AddGroupedExpenses extends ExpenseEvent {
+  const AddGroupedExpenses({
+    required this.expenses,
+    required this.groupName,
+    this.merchant,
+    this.receiptImageUri,
+    this.receiptDate,
+  });
+
+  final List<Expense> expenses;
+  final String groupName;
+  final String? merchant;
+  final String? receiptImageUri;
+  final DateTime? receiptDate;
+
+  @override
+  List<Object?> get props => [
+        expenses,
+        groupName,
+        merchant,
+        receiptImageUri,
+        receiptDate,
+      ];
+}
+
 class UpdateExpense extends ExpenseEvent {
   const UpdateExpense(this.expense);
 

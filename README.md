@@ -47,8 +47,14 @@ Morpheus is a **full-featured personal finance app** built with Flutter that dem
 - Log expenses with categories, notes, and payment sources
 - Smart expense search with filters and query syntax
 - **Multi-currency support** with automatic FX rate conversion
+- Receipt scanning via Document AI (default) or Cloud Vision (preview, date extraction, category suggestions; toggle in AppConfig/settings)
+- Receipt scans create a grouped entry (merchant + timestamp) with stored receipt metadata (image path, totals, receipt date)
+- Category labels fall back to default emojis when stored emojis are missing or invalid
 - Plan future expenses and recurring transactions
 - Dashboard with spending analytics and charts
+- All expenses list view is modularized for easier customization
+- Default category seeds are consolidated (produce/dairy under Groceries)
+- Rule-based category suggestions map produce/dairy keywords to Groceries
 
 ### 💰 Budget Management
 - Set period-based budgets (weekly, monthly, yearly)
@@ -144,6 +150,7 @@ Morpheus follows a **clean, layered architecture** designed for maintainability 
 | **Firebase Auth** | Google Sign-In authentication |
 | **Cloud Firestore** | Real-time NoSQL database |
 | **Cloud Functions (Gen 2)** | Serverless backend logic |
+| **Document AI / Vision API** | Receipt OCR parsing |
 | **Cloud Tasks** | Scheduled reminder delivery |
 | **Cloud Messaging (FCM)** | Push notifications |
 | **Crashlytics** | Crash reporting and analytics |
@@ -309,6 +316,8 @@ This deploys:
 - `syncCardReminders` - Firestore trigger for card changes
 - `sendCardReminderTask` - HTTP handler for Cloud Tasks
 - `sendCardReminders` - Daily reconciliation job
+- `scanReceipt` - Receipt OCR (Google Vision)
+- `scanReceiptDocumentAi` - Receipt OCR (Document AI via Cloud Functions)
 - `computeMonthlyCardSnapshots` - Monthly summary generator
 
 #### 4. Enable Required APIs
@@ -318,6 +327,17 @@ In [Google Cloud Console](https://console.cloud.google.com/apis/library), enable
 - Cloud Scheduler API
 - Cloud Run API
 - Eventarc API
+- Document AI API
+- Vision API
+
+### Receipt Scanning (Document AI / Vision)
+1. Document AI: enable the API and configure Cloud Functions with
+   `DOC_AI_PROJECT_ID`, `DOC_AI_LOCATION`, `DOC_AI_PROCESSOR_ID`
+   (optional `DOC_AI_ENDPOINT`), then deploy Functions.
+2. Cloud Vision: enable the Vision API and deploy Cloud Functions after installing
+   dependencies in `functions/`.
+3. Set `AppConfig.enableReceiptScanning = true` to show the scan UI and choose
+   the provider in settings.
 
 ### iOS Push Notifications
 
@@ -391,6 +411,20 @@ static const String baseCurrency = 'EUR';
 static const String secondaryCurrency = 'USD';
 static const bool enableSecondaryCurrency = true;
 ```
+
+### Receipt Scanning
+Receipt OCR is disabled by default. Enable it in `lib/config/app_config.dart`:
+```dart
+static const bool enableReceiptScanning = true;
+```
+Choose the provider in settings (Document AI default, Cloud Vision optional). The selection is
+stored in app settings and drives the scan flow. For Document AI,
+configure Cloud Functions with `DOC_AI_PROJECT_ID`, `DOC_AI_LOCATION`,
+`DOC_AI_PROCESSOR_ID` (optional `DOC_AI_ENDPOINT`) and deploy Functions. When using
+Cloud Vision, deploy Cloud Functions and turn on the Vision API in your GCP project.
+The client parser normalizes Document AI response maps to avoid Dart key-cast issues.
+Receipt scans upload the image to Storage under `users/{uid}/receipt_scans/` and store the
+`receiptImageUri`, `currency`, `totalAmount`, and `receiptDate` on the group doc for later review.
 
 ### Encryption Keys
 Edit `lib/services/encryption_service.dart`:

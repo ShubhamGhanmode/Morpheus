@@ -1,6 +1,7 @@
 import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/expenses/models/budget.dart';
 import 'package:morpheus/expenses/models/expense.dart';
+import 'package:morpheus/expenses/models/expense_group.dart';
 import 'package:morpheus/expenses/repositories/expense_repository.dart';
 import 'package:morpheus/services/forex_service.dart';
 import 'package:morpheus/services/error_reporter.dart';
@@ -39,6 +40,82 @@ class ExpenseService {
     );
     await _repository.updateExpense(prepared);
     return prepared;
+  }
+
+  Future<List<Expense>> addExpenses(
+    List<Expense> expenses, {
+    List<Budget>? budgets,
+    String? baseCurrency,
+  }) async {
+    if (expenses.isEmpty) return [];
+    final prepared = <Expense>[];
+    for (final expense in expenses) {
+      prepared.add(
+        await prepareExpense(
+          expense,
+          budgets: budgets,
+          baseCurrency: baseCurrency,
+        ),
+      );
+    }
+    await _repository.addExpenses(prepared);
+    return prepared;
+  }
+
+  Future<List<Expense>> addGroupedExpenses(
+    List<Expense> expenses, {
+    required String groupName,
+    String? merchant,
+    String? receiptImageUri,
+    DateTime? receiptDate,
+    List<Budget>? budgets,
+    String? baseCurrency,
+  }) async {
+    if (expenses.isEmpty) return [];
+    final prepared = <Expense>[];
+    for (final expense in expenses) {
+      prepared.add(
+        await prepareExpense(
+          expense,
+          budgets: budgets,
+          baseCurrency: baseCurrency,
+        ),
+      );
+    }
+    final groupId = await _repository.addExpenseGroup(
+      name: groupName,
+      expenses: prepared,
+      merchant: merchant,
+      receiptImageUri: receiptImageUri,
+      receiptDate: receiptDate,
+    );
+    if (groupId == null) {
+      await _repository.addExpenses(prepared);
+      return prepared;
+    }
+    return prepared.map((expense) => expense.copyWith(groupId: groupId)).toList();
+  }
+
+  Stream<List<ExpenseGroup>> streamGroups() {
+    return _repository.streamGroups();
+  }
+
+  Future<List<Expense>> fetchExpensesByGroup(String groupId) {
+    return _repository.fetchExpensesByGroup(groupId);
+  }
+
+  Future<void> updateGroup(ExpenseGroup group) {
+    return _repository.updateGroup(group);
+  }
+
+  Future<void> deleteGroup(
+    String groupId, {
+    bool deleteExpenses = false,
+  }) {
+    return _repository.deleteGroup(
+      groupId,
+      deleteExpenses: deleteExpenses,
+    );
   }
 
   Future<Expense> prepareExpense(
@@ -89,7 +166,14 @@ class ExpenseService {
         ? expense.amount
         : rateToEur != null
             ? expense.amount * rateToEur
-            : expense.amount;
+            : null;
+    final existingAmountEur = expense.amountEur;
+    final resolvedAmountEur = amountEur ??
+        ((existingAmountEur != null &&
+                (expense.currency == AppConfig.baseCurrency ||
+                    existingAmountEur != expense.amount))
+            ? existingAmountEur
+            : null);
 
     double? amountInBudgetCurrency;
     if (budgetCurrency != null) {
@@ -125,7 +209,7 @@ class ExpenseService {
       budgetRate: rateToBudget ?? expense.budgetRate,
       amountInBudgetCurrency:
           amountInBudgetCurrency ?? expense.amountInBudgetCurrency,
-      amountEur: amountEur,
+      amountEur: resolvedAmountEur,
     );
   }
 

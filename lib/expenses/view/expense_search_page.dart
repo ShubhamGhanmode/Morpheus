@@ -112,14 +112,14 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
     required List<AccountCredential> accounts,
   }) {
     final sameLabels = _labelsMatch(_indexedCategoryLabels, categoryLabels);
-    final sameDisplay =
-        _indexedDisplayCurrency == displayCurrency && _indexedBudgetToEur == budgetToEur;
+    final sameDisplay = _indexedDisplayCurrency == displayCurrency && _indexedBudgetToEur == budgetToEur;
 
     final expenseSignature = _signatureForExpenses(expenses);
     final cardSignature = _signatureForCards(cards);
     final accountSignature = _signatureForAccounts(accounts);
 
-    final sameData = sameLabels &&
+    final sameData =
+        sameLabels &&
         sameDisplay &&
         _indexedExpenseSignature == expenseSignature &&
         _indexedCardSignature == cardSignature &&
@@ -158,13 +158,7 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
       final normalizedNote = _normalizeText(expense.note ?? '');
       final categoryLabel = _normalizeText(_categoryLabel(expense.category, categoryLabels));
       final sourceType = (expense.paymentSourceType.isNotEmpty ? expense.paymentSourceType : 'cash').toLowerCase();
-      final sourceLabel = _normalizeText(
-        _labelForSourceKey(
-          _sourceKeyForExpense(expense),
-          cards,
-          accounts,
-        ),
-      );
+      final sourceLabel = _normalizeText(_labelForSourceKey(_sourceKeyForExpense(expense), cards, accounts));
       final transactionType = _normalizeText(expense.transactionType);
       final currency = _normalizeText(expense.currency);
       final amount = amountInDisplayCurrency(expense, displayCurrency, budgetToEur);
@@ -295,8 +289,8 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
         final value = lower.startsWith('src:')
             ? lower.substring(4)
             : lower.startsWith('pay:')
-                ? lower.substring(4)
-                : lower.substring(7);
+            ? lower.substring(4)
+            : lower.substring(7);
         for (final part in value.split(',')) {
           final cleaned = _stripQuotes(part.trim());
           if (cleaned.isEmpty) continue;
@@ -511,10 +505,7 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
   String _normalizeText(String value) => value.trim().toLowerCase();
 
   Set<String> _tokenize(String value) {
-    return value
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((token) => token.isNotEmpty)
-        .toSet();
+    return value.split(RegExp(r'[^a-z0-9]+')).where((token) => token.isNotEmpty).toSet();
   }
 
   List<String> _splitQueryTokens(String input) {
@@ -567,23 +558,15 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
     final month = int.tryParse(match.group(2) ?? '');
     final day = int.tryParse(match.group(3) ?? '');
     if (month == null) {
-      return DateTimeRange(
-        start: DateTime(year, 1, 1),
-        end: DateTime(year, 12, 31, 23, 59, 59, 999),
-      );
+      return DateTimeRange(start: DateTime(year, 1, 1), end: DateTime(year, 12, 31, 23, 59, 59, 999));
     }
     if (day == null) {
       final lastDay = _daysInMonth(year, month);
-      return DateTimeRange(
-        start: DateTime(year, month, 1),
-        end: DateTime(year, month, lastDay, 23, 59, 59, 999),
-      );
+      return DateTimeRange(start: DateTime(year, month, 1), end: DateTime(year, month, lastDay, 23, 59, 59, 999));
     }
-    return DateTimeRange(
-      start: DateTime(year, month, day),
-      end: DateTime(year, month, day, 23, 59, 59, 999),
-    );
+    return DateTimeRange(start: DateTime(year, month, day), end: DateTime(year, month, day, 23, 59, 59, 999));
   }
+
   DateTimeRange? _parseMonthRange(String value) {
     final trimmed = value.trim().toLowerCase();
     if (trimmed.isEmpty) return null;
@@ -765,33 +748,29 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
                             label: const Text('Cash'),
                             selected: localSources.contains('cash'),
                             avatar: const Icon(Icons.payments_outlined, size: 18),
-                            onSelected: (selected) => setModalState(
-                              () => selected ? localSources.add('cash') : localSources.remove('cash'),
-                            ),
+                            onSelected: (selected) =>
+                                setModalState(() => selected ? localSources.add('cash') : localSources.remove('cash')),
                           ),
                           FilterChip(
                             label: const Text('Card'),
                             selected: localSources.contains('card'),
                             avatar: const Icon(Icons.credit_card, size: 18),
-                            onSelected: (selected) => setModalState(
-                              () => selected ? localSources.add('card') : localSources.remove('card'),
-                            ),
+                            onSelected: (selected) =>
+                                setModalState(() => selected ? localSources.add('card') : localSources.remove('card')),
                           ),
                           FilterChip(
                             label: const Text('Account'),
                             selected: localSources.contains('account'),
                             avatar: const Icon(Icons.account_balance, size: 18),
-                            onSelected: (selected) => setModalState(
-                              () => selected ? localSources.add('account') : localSources.remove('account'),
-                            ),
+                            onSelected: (selected) =>
+                                setModalState(() => selected ? localSources.add('account') : localSources.remove('account')),
                           ),
                           FilterChip(
                             label: const Text('Wallet'),
                             selected: localSources.contains('wallet'),
                             avatar: const Icon(Icons.account_balance_wallet_outlined, size: 18),
-                            onSelected: (selected) => setModalState(
-                              () => selected ? localSources.add('wallet') : localSources.remove('wallet'),
-                            ),
+                            onSelected: (selected) =>
+                                setModalState(() => selected ? localSources.add('wallet') : localSources.remove('wallet')),
                           ),
                         ],
                       ),
@@ -854,10 +833,7 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
                             label: const Text('Clear'),
                           ),
                           const Spacer(),
-                          FilledButton(
-                            onPressed: applyResult,
-                            child: const Text('Apply'),
-                          ),
+                          FilledButton(onPressed: applyResult, child: const Text('Apply')),
                         ],
                       ),
                     ],
@@ -906,7 +882,9 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
     final budgetToEur = expenseState.budgetToEur;
     final eurToInr = expenseState.eurToInr;
     final theme = Theme.of(context);
-    final categoryLabels = {for (final c in context.watch<CategoryCubit>().state.items) c.name: c.label};
+    final categories = context.watch<CategoryCubit>().state.items;
+    final categoryLabels = {for (final c in categories) c.name: c.label};
+    final categoryEmojis = {for (final c in categories) c.name: c.resolvedEmoji};
     _syncSearchIndex(
       categoryLabels: categoryLabels,
       expenses: expenses,
@@ -1043,24 +1021,22 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final result = results[index];
-                    final expense = result.entry.expense;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _ExpenseSearchResultTile(
-                        expense: expense,
-                        displayCurrency: displayCurrency,
-                        budgetToEur: budgetToEur,
-                        eurToInr: eurToInr,
-                        categoryLabel: _categoryLabel(expense.category, categoryLabels),
-                        sourceLabel: _sourceLabelFor(expense, cards, accounts),
-                      ),
-                    );
-                  },
-                  childCount: results.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final result = results[index];
+                  final expense = result.entry.expense;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _ExpenseSearchResultTile(
+                      expense: expense,
+                      displayCurrency: displayCurrency,
+                      budgetToEur: budgetToEur,
+                      eurToInr: eurToInr,
+                      categoryLabel: _categoryLabel(expense.category, categoryLabels),
+                      categoryEmoji: categoryEmojis[expense.category] ?? '',
+                      sourceLabel: _sourceLabelFor(expense, cards, accounts),
+                    ),
+                  );
+                }, childCount: results.length),
               ),
             ),
         ],
@@ -1097,6 +1073,7 @@ class _ExpenseSearchPageState extends State<ExpenseSearchPage> {
     }
   }
 }
+
 class _ExpenseSearchFilters {
   const _ExpenseSearchFilters({
     required this.dateRange,
@@ -1197,6 +1174,7 @@ class _ExpenseSearchResultTile extends StatelessWidget {
     required this.budgetToEur,
     required this.eurToInr,
     required this.categoryLabel,
+    required this.categoryEmoji,
     required this.sourceLabel,
   });
 
@@ -1205,6 +1183,7 @@ class _ExpenseSearchResultTile extends StatelessWidget {
   final double? budgetToEur;
   final double? eurToInr;
   final String categoryLabel;
+  final String categoryEmoji;
   final String sourceLabel;
 
   @override
@@ -1212,6 +1191,7 @@ class _ExpenseSearchResultTile extends StatelessWidget {
     final theme = Theme.of(context);
     final fmt = NumberFormat.simpleCurrency(name: displayCurrency);
     final amount = amountInDisplayCurrency(expense, displayCurrency, budgetToEur);
+    final isNegative = amount < 0;
     final altCurrency = alternateCurrency(displayCurrency);
     final altFmt = altCurrency != null ? NumberFormat.simpleCurrency(name: altCurrency) : null;
     final altAmount = altFmt == null
@@ -1225,23 +1205,28 @@ class _ExpenseSearchResultTile extends StatelessWidget {
     final color = Colors.primaries[expense.category.hashCode % Colors.primaries.length];
     final note = expense.note?.trim();
     final dateLabel = DateFormat.MMMd().format(expense.date);
+    final emoji = categoryEmoji.isNotEmpty ? categoryEmoji : '💰';
 
     return Card(
       elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.6)),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.all(14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(Icons.label, color: color),
+            // Category emoji avatar with colored background
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1250,51 +1235,124 @@ class _ExpenseSearchResultTile extends StatelessWidget {
                     expense.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '$categoryLabel - $dateLabel',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          categoryLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text(
+                          '•',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5)),
+                        ),
+                      ),
+                      Text(dateLabel, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    ],
                   ),
-                  if (sourceLabel.isNotEmpty)
-                    Text(
-                      sourceLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  if (sourceLabel.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          _iconForSourceType(expense.paymentSourceType),
+                          size: 12,
+                          color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            sourceLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  if (note != null && note.isNotEmpty)
-                    Text(
-                      note,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ],
+                  if (note != null && note.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        note,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  fmt.format(amount),
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                if (altAmount != null && altFmt != null)
-                  Text(
-                    '~ ${altFmt.format(altAmount)}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  fmt.format(amount.abs()),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: isNegative ? theme.colorScheme.tertiary : theme.colorScheme.onSurface,
                   ),
+                ),
+                if (isNegative)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: theme.colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(4)),
+                    child: Text(
+                      'Credit',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onTertiaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                if (altAmount != null && altFmt != null && !isNegative) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '≈ ${altFmt.format(altAmount.abs())}',
+                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  IconData _iconForSourceType(String type) {
+    switch (type.toLowerCase()) {
+      case 'card':
+        return Icons.credit_card;
+      case 'account':
+        return Icons.account_balance;
+      case 'wallet':
+        return Icons.account_balance_wallet_outlined;
+      default:
+        return Icons.payments_outlined;
+    }
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:morpheus/cards/card_repository.dart';
+import 'package:morpheus/config/app_config.dart';
 import 'package:morpheus/services/app_lock_service.dart';
 import 'package:morpheus/services/notification_service.dart';
 import 'package:morpheus/services/error_reporter.dart';
@@ -113,6 +114,24 @@ class SettingsCubit extends Cubit<SettingsState> {
       await ErrorReporter.recordError(e, stack, reason: 'Save base currency failed');
       emit(state.copyWith(error: errorMessage(e, action: 'Save base currency')));
     }
+  }
+
+  void setReceiptOcrProvider(ReceiptOcrProvider provider) {
+    emit(state.copyWith(receiptOcrProvider: provider, error: null));
+    _repository.saveReceiptOcrProvider(provider).catchError((e, stack) {
+      unawaited(
+        ErrorReporter.recordError(
+          e,
+          stack,
+          reason: 'Save receipt OCR provider failed',
+        ),
+      );
+      emit(
+        state.copyWith(
+          error: errorMessage(e, action: 'Save receipt OCR provider'),
+        ),
+      );
+    });
   }
 
   Future<void> setCardRemindersEnabled(bool enabled) async {

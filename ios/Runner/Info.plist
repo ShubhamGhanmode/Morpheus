@@ -47,5 +47,9 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Use Face ID to unlock Morpheus.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Allow Morpheus to capture receipts for expense scanning.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow Morpheus to select receipt images for expense scanning.</string>
 </dict>
 </plist>

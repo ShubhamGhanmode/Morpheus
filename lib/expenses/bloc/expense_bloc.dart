@@ -30,6 +30,8 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
         super(ExpenseState.initial(baseCurrency: baseCurrency)) {
     on<LoadExpenses>(_onLoadExpenses);
     on<AddExpense>(_onAddExpense);
+    on<AddExpenses>(_onAddExpenses);
+    on<AddGroupedExpenses>(_onAddGroupedExpenses);
     on<UpdateExpense>(_onUpdateExpense);
     on<DeleteExpense>(_onDeleteExpense);
     on<SaveBudget>(_onSaveBudget);
@@ -102,6 +104,78 @@ class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
         state.copyWith(
           loading: false,
           error: errorMessage(e, action: 'Add expense'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onAddExpenses(
+    AddExpenses event,
+    Emitter<ExpenseState> emit,
+  ) async {
+    if (event.expenses.isEmpty) return;
+    emit(state.copyWith(loading: true, error: null));
+    try {
+      final prepared = await _service.addExpenses(
+        event.expenses,
+        budgets: state.budgets,
+        baseCurrency: state.baseCurrency,
+      );
+      final updatedExpenses = [...prepared, ...state.expenses]
+        ..sort((a, b) => b.date.compareTo(a.date));
+      final nextState = _recompute(
+        updatedExpenses,
+        state.budgets,
+        state.focusMonth,
+      );
+      emit(nextState);
+      await _refreshRates(nextState, emit);
+    } catch (e, stack) {
+      await ErrorReporter.recordError(e, stack, reason: 'Add expenses failed');
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Add expenses'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onAddGroupedExpenses(
+    AddGroupedExpenses event,
+    Emitter<ExpenseState> emit,
+  ) async {
+    if (event.expenses.isEmpty) return;
+    emit(state.copyWith(loading: true, error: null));
+    try {
+      final prepared = await _service.addGroupedExpenses(
+        event.expenses,
+        groupName: event.groupName,
+        merchant: event.merchant,
+        receiptImageUri: event.receiptImageUri,
+        receiptDate: event.receiptDate,
+        budgets: state.budgets,
+        baseCurrency: state.baseCurrency,
+      );
+      final updatedExpenses = [...prepared, ...state.expenses]
+        ..sort((a, b) => b.date.compareTo(a.date));
+      final nextState = _recompute(
+        updatedExpenses,
+        state.budgets,
+        state.focusMonth,
+      );
+      emit(nextState);
+      await _refreshRates(nextState, emit);
+    } catch (e, stack) {
+      await ErrorReporter.recordError(
+        e,
+        stack,
+        reason: 'Add grouped expenses failed',
+      );
+      emit(
+        state.copyWith(
+          loading: false,
+          error: errorMessage(e, action: 'Add grouped expenses'),
         ),
       );
     }

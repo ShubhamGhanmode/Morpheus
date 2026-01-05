@@ -9,6 +9,7 @@ class SettingsState {
   final bool appLockEnabled;
   final bool testModeEnabled;
   final String baseCurrency;
+  final ReceiptOcrProvider receiptOcrProvider;
   final String? error;
 
   const SettingsState({
@@ -18,6 +19,7 @@ class SettingsState {
     this.appLockEnabled = false,
     this.testModeEnabled = false,
     this.baseCurrency = AppConfig.baseCurrency,
+    this.receiptOcrProvider = AppConfig.defaultReceiptOcrProvider,
     this.error,
   });
 
@@ -28,6 +30,7 @@ class SettingsState {
     bool? appLockEnabled,
     bool? testModeEnabled,
     String? baseCurrency,
+    ReceiptOcrProvider? receiptOcrProvider,
     String? error,
   }) {
     return SettingsState(
@@ -37,6 +40,7 @@ class SettingsState {
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       testModeEnabled: testModeEnabled ?? this.testModeEnabled,
       baseCurrency: baseCurrency ?? this.baseCurrency,
+      receiptOcrProvider: receiptOcrProvider ?? this.receiptOcrProvider,
       error: error,
     );
   }

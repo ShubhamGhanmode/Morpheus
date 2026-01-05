@@ -163,6 +163,40 @@ class SettingsPage extends StatelessWidget {
                     ),
                 ],
               ),
+              if (AppConfig.enableReceiptScanning)
+                _SettingsSection(
+                  title: 'Receipt scanning',
+                  children: [
+                    _SegmentedSetting(
+                      title: 'OCR provider',
+                      subtitle: 'Choose the backend for receipt extraction',
+                      child: SegmentedButton<ReceiptOcrProvider>(
+                        segments: [
+                          ButtonSegment(
+                            value: ReceiptOcrProvider.documentAi,
+                            label: Text(
+                              ReceiptOcrProvider.documentAi.label,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            icon: const Icon(Icons.document_scanner_outlined, size: 16),
+                          ),
+                          ButtonSegment(
+                            value: ReceiptOcrProvider.vision,
+                            label: Text(
+                              ReceiptOcrProvider.vision.label,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            icon: const Icon(Icons.receipt_long, size: 16),
+                          ),
+                        ],
+                        selected: {state.receiptOcrProvider},
+                        onSelectionChanged: (selection) {
+                          context.read<SettingsCubit>().setReceiptOcrProvider(selection.first);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               _SettingsSection(
                 title: 'Security',
                 children: [
