@@ -150,6 +150,11 @@ class ReceiptScanCubit extends Cubit<ReceiptScanState> {
     emit(state.copyWith(currency: currency));
   }
 
+  void setReceiptDate(DateTime? receiptDate) {
+    if (receiptDate == null) return;
+    emit(state.copyWith(receiptDate: receiptDate));
+  }
+
   void updateItemName(String id, String name) {
     final updated = state.items
         .map((item) => item.id == id ? item.copyWith(name: name) : item)

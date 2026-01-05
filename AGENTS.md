@@ -610,7 +610,7 @@ flutter test integration_test/         # Integration tests
 - Monthly snapshot writes in Firestore (runs on 1st each month).
 - Expense add/edit with each payment source and category.
 - Expense search: query syntax, quick filters, and result list behavior.
-- Receipt scan: preview image, parse date, per-item categories, retry works, confirm adds expenses with group + receiptImageUri + totals.
+- Receipt scan: preview image, parse date, edit receipt date, per-item categories, retry works, confirm adds expenses with group + receiptImageUri + totals.
 - Export: pick a date range and verify expenses, budget summary, and planned expenses CSVs open cleanly.
 - Account ledger reflects expenses and credits correctly.
 - Currency conversion shows base and secondary values consistently.

@@ -634,6 +634,7 @@ class _ReadyView extends StatelessWidget {
                     merchantController: merchantController,
                     onMerchantChanged: cubit.setMerchant,
                     onCurrencyChanged: cubit.setCurrency,
+                    onDateChanged: cubit.setReceiptDate,
                     fmt: fmt,
                   ),
                 ),
@@ -795,6 +796,7 @@ class _ReceiptHeaderCard extends StatelessWidget {
     required this.merchantController,
     required this.onMerchantChanged,
     required this.onCurrencyChanged,
+    required this.onDateChanged,
     required this.fmt,
   });
 
@@ -802,6 +804,7 @@ class _ReceiptHeaderCard extends StatelessWidget {
   final TextEditingController merchantController;
   final ValueChanged<String> onMerchantChanged;
   final ValueChanged<String?> onCurrencyChanged;
+  final ValueChanged<DateTime> onDateChanged;
   final NumberFormat fmt;
 
   @override
@@ -809,6 +812,26 @@ class _ReceiptHeaderCard extends StatelessWidget {
     final theme = Theme.of(context);
     final date = state.receiptDate;
     final hasImage = state.imageBytes != null;
+    final dateLabel = date != null ? DateFormat.yMMMd().format(date) : 'Select date';
+    final now = DateTime.now();
+    final firstDate = DateTime(2000);
+
+    Future<void> pickDate() async {
+      var initialDate = date ?? now;
+      if (initialDate.isAfter(now)) {
+        initialDate = now;
+      } else if (initialDate.isBefore(firstDate)) {
+        initialDate = firstDate;
+      }
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: firstDate,
+        lastDate: now,
+      );
+      if (!context.mounted || picked == null) return;
+      onDateChanged(picked);
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -999,6 +1022,51 @@ class _ReceiptHeaderCard extends StatelessWidget {
                       filled: true,
                       fillColor: Colors.transparent,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // Receipt date selector
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      onTap: pickDate,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Receipt date',
+                          prefixIcon: Container(
+                            margin: const EdgeInsets.only(left: 12, right: 8),
+                            child: Icon(Icons.calendar_today_rounded, color: theme.colorScheme.primary),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        ),
+                        child: Text(
+                          dateLabel,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: date != null ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant,
+                            fontWeight: date != null ? FontWeight.w500 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
