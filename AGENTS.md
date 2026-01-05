@@ -696,11 +696,6 @@ Start here if you are unsure where to change something:
 - Repository methods: `Future<T>` for writes, `Stream<List<T>>` for reads
 - Error handling: emit error state with user message, log full details
 
-## Agent Review Notes
-- Latest review rating: 7/10.
-- High risk: Client/server encryption mode mismatch breaks card reminder bank names; monthly card snapshot query uses millis vs Firestore Timestamp; FX fallback stores unconverted amounts on fetch failures.
-- Medium: Base currency setting not consistently honored in conversions; notification IDs derive from hashCode; Google serverClientId is hard-coded; FX HTTP client has no timeout/caching.
-- Low: Expense search numeric filters ignore negatives; expense fetch/search index is O(n) per build for large datasets.
 
 
 
