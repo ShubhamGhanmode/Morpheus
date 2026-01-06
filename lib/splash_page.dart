@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 
 class SplashPage extends StatelessWidget {
-  const SplashPage({super.key, this.message, this.onRetry});
+  const SplashPage({
+    super.key,
+    this.message,
+    this.onRetry,
+    this.title,
+    this.description,
+  });
 
   final String? message;
   final VoidCallback? onRetry;
+  final String? title;
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +43,9 @@ class SplashPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  error ? 'We hit a snag' : 'Checking your session',
+                  error
+                      ? (title ?? 'We hit a snag')
+                      : (title ?? 'Checking your session'),
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -44,7 +54,8 @@ class SplashPage extends StatelessWidget {
                 Text(
                   error
                       ? message!
-                      : 'Verifying your login so we can sync your data securely.',
+                      : (description ??
+                          'Verifying your login so we can sync your data securely.'),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

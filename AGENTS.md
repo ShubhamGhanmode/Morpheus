@@ -32,7 +32,7 @@ Morpheus is a Flutter finance companion with:
 ## Tech Stack
 - Flutter (Dart 3.38+), Material 3 UI.
 - State management: `bloc` / `flutter_bloc` with `equatable`.
-- Firebase: Auth, Firestore, Messaging, Cloud Functions Gen 2, Crashlytics.
+- Firebase: Auth, Firestore, Messaging, Cloud Functions Gen 2, Crashlytics, Remote Config.
 - Local storage: SQLite via `sqflite` / `sqflite_common_ffi`.
 - Notifications: `flutter_local_notifications`, FCM.
 - Cloud Tasks for scheduled pushes.
@@ -92,6 +92,8 @@ lib/
     view/                    # Dashboard, widgets, sheets
   lock/                      # App lock gate
     app_lock_gate.dart
+  version/                   # App version gate (Remote Config min build)
+    app_version_gate.dart
   models/                    # Shared model utilities
     json_converters.dart
   services/                  # Core services
@@ -154,6 +156,7 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 **Core Navigation**
 - App shell / nav: `lib/navigation_bar.dart` (IndexedStack tabs)
 - App entry: `lib/main.dart`
+- App version gate: `lib/version/app_version_gate.dart`
 - Splash: `lib/splash_page.dart`
 - Auth flow: `lib/signup_page.dart`
 
@@ -507,6 +510,16 @@ Weight = TF * IDF
 - Settings has a base currency toggle which is commented out for now; currently only affects some UI/flows.
   Consider consolidating to a single source of truth if you extend currency logic.
 
+## Remote Config Version Gate
+- Android minimum build enforced via Remote Config key `min_build_android`.
+- Gate widget lives at `lib/version/app_version_gate.dart` and wraps app startup in `lib/main.dart`.
+- Uses `PackageInfo.buildNumber` (same as Android versionCode from `pubspec.yaml`).
+- Set the minimum build number in the parameter value (default or conditional); the description field is just notes.
+- Set `min_build_android` to `0` to disable gating; update the build number to allow new releases.
+- Leave "Use in-app default" off in the console if you want Remote Config to enforce values; enabling it uses the app default (0) and bypasses the gate.
+- Publish Remote Config changes; production fetches at most once per hour (debug fetches immediately).
+- Test by setting `min_build_android` above the current build and relaunching the app.
+
 ## Error Handling Conventions
 - Wrap repository writes in try/catch for `FirebaseException` and `PlatformException`.
 - Emit failure states with context (operation + message) for UI surfacing.
@@ -604,6 +617,7 @@ flutter test integration_test/         # Integration tests
 **Manual validation checklist:**
 - Auth: login, logout, and account switch resets local caches.
 - App lock toggle and biometric prompt behavior.
+- Remote Config gate: set `min_build_android` above the current build and verify update-required screen.
 - Card add/edit, reminder offsets, and network logo rendering.
 - Test notification (local) and test push (server) from UI.
 - Reminder scheduling in Firestore and Cloud Tasks queue.
@@ -626,6 +640,7 @@ flutter test integration_test/         # Integration tests
 ## Common Pitfalls
 - Missing `FlutterFragmentActivity` causes biometric auth to fail.
 - Missing Google Services files breaks Android/iOS builds.
+- `GoogleApiManager`/`FlagRegistrar` `DEVELOPER_ERROR` or `Unknown calling package name 'com.google.android.gms'` in logcat usually means Play services are missing/outdated or the app id/SHA-1 does not match `google-services.json`; use a Google Play emulator image or update Play services, and verify the package + SHA-1 config.
 - Missing Eventarc permissions can block Gen 2 Firestore triggers.
 - Region mismatch: callable functions must be called with `region: europe-west1`.
 - Encryption key/IV mismatch: server cannot decrypt card data.
@@ -634,6 +649,7 @@ flutter test integration_test/         # Integration tests
 - Web platform: some services have stub implementations (_web.dart).
 - Receipt scan: ensure `AppConfig.enableReceiptScanning` is true, Functions are deployed,
   and Vision/Document AI APIs + DOC_AI_* params are configured.
+- Remote Config: setting `min_build_android` above the current build number blocks Android startup.
 - SQLite not available on web: use conditional imports.
 - Sentry/Crashlytics: ensure DSN and config are set for production.
 - DateTime timezone: use `flutter_timezone` for user's local zone.
@@ -695,6 +711,8 @@ Start here if you are unsure where to change something:
 - Private constructor for Freezed helpers: `const ClassName._();`
 - Repository methods: `Future<T>` for writes, `Stream<List<T>>` for reads
 - Error handling: emit error state with user message, log full details
+
+
 
 
 

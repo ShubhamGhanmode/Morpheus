@@ -1671,7 +1671,7 @@ class _MonthlyLineChart extends StatelessWidget {
                               DateFormat.MMM().format(months[index]),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 fontWeight: isCurrentMonth ? FontWeight.w700 : FontWeight.w500,
-                                color: isCurrentMonth ? Colors.indigo : theme.colorScheme.onSurfaceVariant,
+                                color: isCurrentMonth ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           );
@@ -1683,8 +1683,8 @@ class _MonthlyLineChart extends StatelessWidget {
                   ),
                   lineBarsData: [
                     LineChartBarData(
-                      spots: [for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), values[i])],
-                      gradient: LinearGradient(colors: [Colors.indigo.shade400, Colors.blue.shade400]),
+                        spots: [for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), double.parse(values[i].toStringAsFixed(2)))],
+                      gradient: LinearGradient(colors: [theme.colorScheme.onSurfaceVariant, theme.colorScheme.secondaryFixed]),
                       isCurved: true,
                       barWidth: 3,
                       dotData: FlDotData(

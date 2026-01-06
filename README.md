@@ -5,7 +5,7 @@
 ### A Modern Personal Finance Companion
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.38+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.8+-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.10+-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
 [![Firebase](https://img.shields.io/badge/Firebase-Cloud-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -149,6 +149,7 @@ Morpheus follows a **clean, layered architecture** designed for maintainability 
 |------------|---------|
 | **Firebase Auth** | Google Sign-In authentication |
 | **Cloud Firestore** | Real-time NoSQL database |
+| **Remote Config** | Android minimum build gating |
 | **Cloud Functions (Gen 2)** | Serverless backend logic |
 | **Document AI / Vision API** | Receipt OCR parsing |
 | **Cloud Tasks** | Scheduled reminder delivery |
@@ -426,6 +427,17 @@ The client parser normalizes Document AI response maps to avoid Dart key-cast is
 Receipt scans upload the image to Storage under `users/{uid}/receipt_scans/` and store the
 `receiptImageUri`, `currency`, `totalAmount`, and `receiptDate` on the group doc for later review.
 
+### Remote Config (Android Min Build)
+Morpheus enforces an Android minimum build via Firebase Remote Config:
+- Create a Remote Config parameter named `min_build_android` (type: Number).
+- The value is compared against the app build number from `pubspec.yaml` (`version: x.y.z+BUILD`).
+- Set the minimum build number in the parameter value (default or conditional); the description field is just notes.
+- If `min_build_android` is greater than the current build number, Android shows an update-required gate.
+- Set `min_build_android` to `0` to disable gating.
+- Leave "Use in-app default" off in the console if you want Remote Config to enforce values; enabling it uses the app default (0) and bypasses the gate.
+- Publish changes in Remote Config; production clients fetch at most once per hour (debug fetches immediately).
+- To test, set `min_build_android` above the current build and relaunch the app.
+
 ### Encryption Keys
 Edit `lib/services/encryption_service.dart`:
 ```dart
@@ -480,3 +492,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you found this project helpful, please consider giving it a ⭐
 
 </div>
+
+

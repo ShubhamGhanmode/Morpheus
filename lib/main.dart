@@ -18,6 +18,7 @@ import 'package:morpheus/settings/settings_cubit.dart';
 import 'package:morpheus/settings/settings_repository.dart';
 import 'package:morpheus/settings/settings_state.dart';
 import 'package:morpheus/theme/app_theme.dart';
+import 'package:morpheus/version/app_version_gate.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'firebase_options.dart'; // created by flutterfire configure
@@ -115,9 +116,11 @@ class MorpheusApp extends StatelessWidget {
                 contrast: settings.contrast,
               ),
               themeMode: settings.themeMode,
-              home: AppLockGate(
-                enabled: settings.appLockEnabled,
-                child: const AuthGate(),
+              home: AppVersionGate(
+                child: AppLockGate(
+                  enabled: settings.appLockEnabled,
+                  child: const AuthGate(),
+                ),
               ),
             );
           },
