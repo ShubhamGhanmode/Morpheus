@@ -182,7 +182,7 @@ Morpheus follows a **clean, layered architecture** designed for maintainability 
 | Technology | Purpose |
 |------------|---------|
 | **Flutter 3.38+** | Cross-platform UI framework |
-| **Dart 3.8+** | Programming language with null safety |
+| **Dart 3.10+** | Programming language with null safety |
 | **flutter_bloc** | State management (BLoC/Cubit pattern) |
 | **freezed** | Immutable data classes with code generation |
 | **fl_chart** | Beautiful expense visualization charts |
@@ -219,7 +219,7 @@ Before you begin, ensure you have the following installed:
 | Tool | Version | Installation Guide |
 |------|---------|-------------------|
 | **Flutter SDK** | 3.38+ | [flutter.dev/docs/get-started](https://flutter.dev/docs/get-started/install) |
-| **Dart SDK** | 3.8+ | Included with Flutter |
+| **Dart SDK** | 3.10+ | Included with Flutter |
 | **Android Studio** | Latest | [developer.android.com](https://developer.android.com/studio) |
 | **Xcode** (macOS only) | 14+ | Mac App Store |
 | **Node.js** | 18+ | [nodejs.org](https://nodejs.org) (for Cloud Functions) |
