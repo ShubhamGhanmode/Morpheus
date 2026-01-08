@@ -224,6 +224,9 @@ Examples: `notification_service.dart`, `banks_db.dart`, `export_service.dart`
 - Database helper: `lib/database/database_helper.dart`
 - Banks DB: `lib/data/banks_db.dart`
 
+**Assets**
+- App screenshots for README: `assets/screenshots/`
+
 **Backend**
 - Cloud Functions: `functions/index.js`
 - Receipt parser: `functions/receipt_parser.js`
