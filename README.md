@@ -83,45 +83,60 @@ Morpheus is a **full-featured personal finance app** built with Flutter that dem
 
 ## 📸 Screenshots
 
-### Dashboard
 <div align="center">
-<img src="assets/screenshots/dashboard1.jpeg" width="200" alt="Dashboard overview" />
-<img src="assets/screenshots/dashboard2.jpeg" width="200" alt="Dashboard trends" />
-<img src="assets/screenshots/dashboard3.jpeg" width="200" alt="Dashboard budget summary" />
-<img src="assets/screenshots/dashboard4.jpeg" width="200" alt="Dashboard cards summary" />
-<img src="assets/screenshots/dashboard5.jpeg" width="200" alt="Dashboard insights" />
-<img src="assets/screenshots/light_mode_dashboard.jpeg" width="200" alt="Dashboard light mode" />
-<img src="assets/screenshots/dark_mode_dashboard.jpeg" width="200" alt="Dashboard dark mode" />
-</div>
 
-### Expenses
-<div align="center">
-<img src="assets/screenshots/all_expenses1.jpeg" width="200" alt="All expenses summary" />
-<img src="assets/screenshots/all_expenses_view_expenses.jpeg" width="200" alt="All expenses list" />
-<img src="assets/screenshots/all_expenses_insights.jpeg" width="200" alt="Expense insights" />
-<img src="assets/screenshots/all_expenses_analytics_monthly.jpeg" width="200" alt="Expense analytics monthly" />
-<img src="assets/screenshots/all_expenses_analytics_yearly.jpeg" width="200" alt="Expense analytics yearly" />
-</div>
+### 📊 Dashboard
 
-### Cards
-<div align="center">
-<img src="assets/screenshots/cards.jpeg" width="200" alt="Cards" />
-</div>
+| Overview | Budget & Forecast | Subscriptoins |
+|:--------:|:------:|:--------------:|
+| <img src="assets/screenshots/dashboard1.jpeg" width="220" alt="Dashboard overview" /> | <img src="assets/screenshots/dashboard2.jpeg" width="220" alt="Dashboard trends" /> | <img src="assets/screenshots/dashboard3.jpeg" width="220" alt="Dashboard budget summary" /> |
 
-### Accounts
-<div align="center">
-<img src="assets/screenshots/accounts.jpeg" width="200" alt="Accounts" />
-</div>
+| 6-month burn graph | Category Mix Pie chart |
+|:-------------:|:--------:|
+| <img src="assets/screenshots/dashboard4.jpeg" width="220" alt="Dashboard cards summary" /> | <img src="assets/screenshots/dashboard5.jpeg" width="220" alt="Dashboard insights" /> |
 
-### Receipt Scanning
-<div align="center">
-<img src="assets/screenshots/scan_receipt.jpeg" width="200" alt="Receipt scanning" />
-</div>
+#### 🌗 Theme Support
 
-### Settings and Sign Up
-<div align="center">
-<img src="assets/screenshots/settings.jpeg" width="200" alt="Settings" />
-<img src="assets/screenshots/sign_up.jpeg" width="200" alt="Sign up" />
+| Light Mode | Dark Mode |
+|:----------:|:---------:|
+| <img src="assets/screenshots/light_mode_dashboard.jpeg" width="220" alt="Dashboard light mode" /> | <img src="assets/screenshots/dark_mode_dashboard.jpeg" width="220" alt="Dashboard dark mode" /> |
+
+---
+
+### 💸 Expenses
+
+| Summary | Expenses List | Insights |
+|:-------:|:-------------:|:--------:|
+| <img src="assets/screenshots/all_expenses1.jpeg" width="220" alt="All expenses summary" /> | <img src="assets/screenshots/all_expenses_view_expenses.jpeg" width="220" alt="All expenses list" /> | <img src="assets/screenshots/all_expenses_insights.jpeg" width="220" alt="Expense insights" /> |
+
+| Monthly Analytics | Yearly Analytics |
+|:-----------------:|:----------------:|
+| <img src="assets/screenshots/all_expenses_analytics_monthly.jpeg" width="220" alt="Expense analytics monthly" /> | <img src="assets/screenshots/all_expenses_analytics_yearly.jpeg" width="220" alt="Expense analytics yearly" /> |
+
+---
+
+### 💳 Cards & 🏦 Accounts
+
+| Credit Cards | Bank Accounts |
+|:------------:|:-------------:|
+| <img src="assets/screenshots/cards.jpeg" width="220" alt="Credit cards management" /> | <img src="assets/screenshots/accounts.jpeg" width="220" alt="Bank accounts" /> |
+
+---
+
+### 🧾 Receipt Scanning
+
+| Scan & Parse |
+|:------------:|
+| <img src="assets/screenshots/scan_receipt.jpeg" width="220" alt="Receipt scanning with OCR" /> |
+
+---
+
+### ⚙️ Settings & 🔐 Authentication
+
+| Settings | Sign Up |
+|:--------:|:-------:|
+| <img src="assets/screenshots/settings.jpeg" width="220" alt="App settings" /> | <img src="assets/screenshots/sign_up.jpeg" width="220" alt="Sign up screen" /> |
+
 </div>
 
 ---
